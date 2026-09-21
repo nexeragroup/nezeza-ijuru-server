@@ -1,9 +1,7 @@
-onlyBuiltDependencies:
-  - '@parcel/watcher'
-  - argon2
-  - bcrypt
-  - msgpackr-extract
-  - unrs-resolver
-
-ignoredBuiltDependencies:
-  - '@scarf/scarf'
+allowBuilds:
+  '@parcel/watcher': true
+  argon2: true
+  bcrypt: true
+  msgpackr-extract: true
+  unrs-resolver: true
+  '@scarf/scarf': false

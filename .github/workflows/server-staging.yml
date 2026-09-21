@@ -101,8 +101,27 @@ jobs:
         with:
           sparse-checkout: docker-compose.staging.yml
 
+      - name: Validate staging deployment secrets
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.STAGING_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.STAGING_DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.STAGING_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.STAGING_DEPLOY_KNOWN_HOSTS }}
+          GHCR_USERNAME: ${{ secrets.STAGING_GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.STAGING_GHCR_TOKEN }}
+        run: |
+          set -euo pipefail
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS GHCR_USERNAME GHCR_TOKEN; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing staging deployment secret for $name"
+              exit 1
+            fi
+          done
+
       - name: Load deployment SSH key
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.STAGING_DEPLOY_SSH_KEY }}
 

@@ -127,6 +127,12 @@ export const validationSchema = Joi.object({
     .min(32)
     .default(''),
 
+  CSRF_COOKIE_DOMAIN: Joi.string()
+    .trim()
+    .allow('')
+    .pattern(/^\.[A-Za-z0-9.-]+$/)
+    .default(''),
+
   DISABLE_POST_CSRF: booleanEnv().default(false),
 
   MFA_ENCRYPTION_KEY: base64Key32().default(''),

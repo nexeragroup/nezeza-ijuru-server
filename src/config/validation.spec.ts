@@ -1,6 +1,14 @@
 import { validationSchema } from './validation';
 
 describe('gateway crypto environment validation', () => {
+  it('allows a shared parent domain for the cross-origin CSRF cookie', () => {
+    const result = validationSchema.validate({
+      CSRF_COOKIE_DOMAIN: '.nezezaijuru.org',
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+
   it('keeps encrypted gateway transport opt-in', () => {
     const result = validationSchema.validate({ CRYPTO_ENABLED: false });
 

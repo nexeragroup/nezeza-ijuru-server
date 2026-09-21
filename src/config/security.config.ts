@@ -2,6 +2,7 @@ export default () => ({
   security: {
     cookieSecret: process.env.SESSION_SECRET ?? '',
     csrfSecret: process.env.CSRF_SECRET ?? '',
+    csrfCookieDomain: process.env.CSRF_COOKIE_DOMAIN || undefined,
     disablePostCsrf: process.env.DISABLE_POST_CSRF === 'true',
     trustProxy: process.env.TRUST_PROXY === 'true',
     secureCookies: process.env.SECURE_COOKIES === 'true',

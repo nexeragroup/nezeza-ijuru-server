@@ -1,0 +1,6 @@
+export enum AttendeeStatus {
+  REGISTERED = 'REGISTERED',
+  CONFIRMED = 'CONFIRMED',
+  CANCELLED = 'CANCELLED',
+  WAITLISTED = 'WAITLISTED',
+}

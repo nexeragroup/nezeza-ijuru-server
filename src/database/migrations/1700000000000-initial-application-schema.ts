@@ -1,0 +1,233 @@
+import { MigrationInterface, QueryRunner } from 'typeorm';
+
+export class InitialApplicationSchema1700000000000 implements MigrationInterface {
+  name = 'InitialApplicationSchema1700000000000';
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      'CREATE EXTENSION IF NOT EXISTS "uuid-ossp"',
+    );
+    await queryRunner.query(`CREATE TABLE "dead_letter_events" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "deadLetterId" character varying(255) NOT NULL, "queueName" character varying(255) NOT NULL, "jobId" character varying(255) NOT NULL, "eventId" uuid NOT NULL, "eventType" character varying(255) NOT NULL, "schemaVersion" integer NOT NULL, "payload" jsonb NOT NULL, "headers" jsonb NOT NULL DEFAULT '{}'::jsonb, "attempts" integer NOT NULL DEFAULT '0', "errorName" character varying(255) NOT NULL, "errorMessage" text NOT NULL, "failedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL, "replayedAt" TIMESTAMP(3) WITH TIME ZONE, "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "chk_dead_letter_attempts_non_negative" CHECK ("attempts" >= 0), CONSTRAINT "chk_dead_letter_schema_version_positive" CHECK ("schemaVersion" > 0), CONSTRAINT "PK_c81a59b2022112729285a240c4e" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_dead_letter_events_created_at" ON "dead_letter_events"  ("createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_dead_letter_events_replayed_at" ON "dead_letter_events"  ("replayedAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_dead_letter_events_queue_failed_at" ON "dead_letter_events"  ("queueName", "failedAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_dead_letter_events_event_id" ON "dead_letter_events"  ("eventId") `);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_dead_letter_events_dead_letter_id" ON "dead_letter_events"  ("deadLetterId") `);
+    await queryRunner.query(`CREATE TYPE "public"."outbox_status_enum" AS ENUM('PENDING', 'PROCESSING', 'PUBLISHED', 'FAILED')`);
+    await queryRunner.query(`CREATE TABLE "outbox_events" ("eventId" uuid NOT NULL, "eventType" character varying(255) NOT NULL, "schemaVersion" integer NOT NULL, "aggregateType" character varying(255), "aggregateId" character varying(255), "payload" jsonb NOT NULL, "headers" jsonb NOT NULL DEFAULT '{}'::jsonb, "status" "public"."outbox_status_enum" NOT NULL DEFAULT 'PENDING', "attempts" integer NOT NULL DEFAULT '0', "availableAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), "publishedAt" TIMESTAMP(3) WITH TIME ZONE, "claimToken" uuid, "leaseExpiresAt" TIMESTAMP(3) WITH TIME ZONE, "lastError" text, CONSTRAINT "chk_outbox_attempts_non_negative" CHECK ("attempts" >= 0), CONSTRAINT "chk_outbox_schema_version_positive" CHECK ("schemaVersion" > 0), CONSTRAINT "PK_2e11b9ee3518231eeea21f93c44" PRIMARY KEY ("eventId"))`);
+    await queryRunner.query(`CREATE INDEX "idx_outbox_events_published_at" ON "outbox_events"  ("publishedAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_outbox_events_aggregate" ON "outbox_events"  ("aggregateType", "aggregateId") `);
+    await queryRunner.query(`CREATE INDEX "idx_outbox_events_lease" ON "outbox_events"  ("status", "leaseExpiresAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_outbox_events_dispatch" ON "outbox_events"  ("status", "availableAt", "createdAt") `);
+    await queryRunner.query(`CREATE TABLE "processed_events" ("consumerName" character varying(255) NOT NULL, "eventId" uuid NOT NULL, "processedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_30487a0b7614c9b0b3ea84b8b6d" PRIMARY KEY ("consumerName", "eventId"))`);
+    await queryRunner.query(`CREATE INDEX "idx_processed_events_processed_at" ON "processed_events"  ("processedAt") `);
+    await queryRunner.query(`CREATE TABLE "venues" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying NOT NULL, "address" character varying, "city" text, "active" boolean NOT NULL DEFAULT true, "district" character varying, "country" character varying NOT NULL DEFAULT 'Rwanda', "latitude" numeric(10,7), "longitude" numeric(10,7), "map" text, "capacity" integer, "phone" character varying, "email" character varying, "instructions" text, "website" text, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_cb0f885278d12384eb7a81818be" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TYPE "public"."invitation_roles_role_enum" AS ENUM('HOST', 'CO_HOST', 'MC', 'MODERATOR', 'FACILITATOR', 'ORGANIZER', 'COORDINATOR', 'PREACHER', 'GUEST_PREACHER', 'MINISTER', 'PRAYER_LEADER', 'WORSHIP_LEADER', 'CHOIR_MEMBER', 'SPEAKER', 'GUEST_SPEAKER', 'KEYNOTE_SPEAKER', 'PANELIST', 'INTERVIEWER', 'INTERVIEWEE', 'GUEST', 'SPECIAL_GUEST', 'CHIEF_GUEST', 'VIP', 'DELEGATE', 'PERFORMER', 'ARTIST', 'MUSICIAN', 'SINGER', 'CHOIR', 'WORSHIP_TEAM', 'BAND', 'DANCER', 'DANCE_GROUP', 'POET', 'VOLUNTEER', 'TRANSLATOR', 'INTERPRETER', 'MEDIA_PERSON', 'PHOTOGRAPHER', 'VIDEOGRAPHER', 'TECHNICAL_SUPPORT', 'OTHER')`);
+    await queryRunner.query(`CREATE TABLE "invitation_roles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "role" "public"."invitation_roles_role_enum" NOT NULL, "roleLabel" character varying(150), "isPrimary" boolean NOT NULL DEFAULT false, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "invitationId" uuid NOT NULL, CONSTRAINT "PK_5e607c36778cb88544883936cb2" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TYPE "public"."invitees_inviteetype_enum" AS ENUM('PERSON', 'CHOIR', 'MINISTRY', 'BAND', 'WORSHIP_TEAM', 'DANCE_GROUP', 'ORGANIZATION', 'CHURCH', 'DELEGATION', 'MEDIA_HOUSE', 'OTHER_GROUP')`);
+    await queryRunner.query(`CREATE TYPE "public"."invitees_title_enum" AS ENUM('PASTOR', 'REVEREND', 'BISHOP', 'ARCHBISHOP', 'APOSTLE', 'EVANGELIST', 'PROPHET', 'DEACON', 'ELDER', 'DOCTOR', 'PROFESSOR', 'HONORABLE', 'OTHER')`);
+    await queryRunner.query(`CREATE TABLE "invitees" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "inviteetype" "public"."invitees_inviteetype_enum" NOT NULL, "displayName" character varying(180) NOT NULL, "active" boolean NOT NULL DEFAULT true, "title" "public"."invitees_title_enum", "customTitle" character varying(80), "name" character varying(255), "firstName" character varying(100), "lastName" character varying(100), "slug" character varying(200), "description" text, "bio" text, "biography" text, "organization" character varying(180), "contactPerson" character varying(180), "email" character varying(180), "phone" character varying(40), "publicEmail" character varying(180), "publicPhone" character varying(40), "country" character varying(100), "city" character varying(100), "website" character varying(500), "social" jsonb, "media" uuid, "logo_media_id" uuid, "notes" text, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_49807fe943a4c77bff2e1dea72d" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TYPE "public"."invitations_scope_enum" AS ENUM('EVENT', 'SESSION')`);
+    await queryRunner.query(`CREATE TYPE "public"."invitations_status_enum" AS ENUM('DRAFT', 'PENDING', 'SENT', 'DELIVERED', 'ACCEPTED', 'DECLINED', 'CANCELLED', 'EXPIRED')`);
+    await queryRunner.query(`CREATE TYPE "public"."invitations_attendancestatus_enum" AS ENUM('NOT_RECORDED', 'EXPECTED', 'ARRIVED', 'ATTENDED', 'ABSENT', 'CANCELLED')`);
+    await queryRunner.query(`CREATE TYPE "public"."invitations_publicationstatus_enum" AS ENUM('DRAFT', 'SCHEDULED', 'PUBLISHED', 'ARCHIVED')`);
+    await queryRunner.query(`CREATE TABLE "invitations" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "reference" character varying(40) NOT NULL, "scope" "public"."invitations_scope_enum" NOT NULL, "status" "public"."invitations_status_enum" NOT NULL DEFAULT 'DRAFT', "attendanceStatus" "public"."invitations_attendancestatus_enum" NOT NULL DEFAULT 'NOT_RECORDED', "invitedAt" TIMESTAMP WITH TIME ZONE, "invitationMessage" text, "expectedArrivalAt" TIMESTAMP WITH TIME ZONE, "expectedDepartureAt" TIMESTAMP WITH TIME ZONE, "confirmedAt" TIMESTAMP WITH TIME ZONE, "declinedAt" TIMESTAMP WITH TIME ZONE, "cancelledAt" TIMESTAMP WITH TIME ZONE, "respondedAt" TIMESTAMP WITH TIME ZONE, "checkedInAt" TIMESTAMP WITH TIME ZONE, "numberOfPeople" integer, "accommodationRequired" boolean NOT NULL DEFAULT false, "transportRequired" boolean NOT NULL DEFAULT false, "specialRequirements" text, "internalNotes" text, "publicNotes" text, "isFeatured" boolean NOT NULL DEFAULT false, "publicationStatus" "public"."invitations_publicationstatus_enum" NOT NULL DEFAULT 'DRAFT', "notificationSentAt" TIMESTAMP WITH TIME ZONE, "lastReminderAt" TIMESTAMP WITH TIME ZONE, "metadata" jsonb, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "inviteeId" uuid NOT NULL, "eventId" uuid NOT NULL, "sessionId" uuid, CONSTRAINT "UQ_234c5abc6c4a676bb3a4edea27b" UNIQUE ("reference"), CONSTRAINT "chk_invitations_scope" CHECK ((scope = 'EVENT' AND "sessionId" IS NULL) OR (scope = 'SESSION' AND "sessionId" IS NOT NULL)), CONSTRAINT "PK_5dec98cfdfd562e4ad3648bbb07" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TABLE "sessions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "code" character varying NOT NULL, "slug" character varying NOT NULL, "title" character varying NOT NULL, "description" text, "startAt" TIMESTAMP WITH TIME ZONE NOT NULL, "endAt" TIMESTAMP WITH TIME ZONE NOT NULL, "capacity" integer, "registrationRequired" boolean NOT NULL DEFAULT false, "registrationOpensAt" TIMESTAMP WITH TIME ZONE, "registrationClosesAt" TIMESTAMP WITH TIME ZONE, "stream_url" text, "sessionStatus" character varying NOT NULL DEFAULT 'PLANNED', "publicationStatus" character varying NOT NULL DEFAULT 'DRAFT', "displayOrder" integer NOT NULL DEFAULT '0', "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "eventId" uuid NOT NULL, "venueId" uuid, CONSTRAINT "PK_3238ef96f18b355b671619111bc" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_sessions_id_event" ON "sessions"  ("id", "eventId") `);
+    await queryRunner.query(`CREATE TABLE "programs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "slug" character varying NOT NULL, "name" character varying NOT NULL, "summary" text, "description" text, "featuredMediaId" uuid, "publicationStatus" character varying NOT NULL DEFAULT 'DRAFT', "publishedAt" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_4180c2bfa0402878a63b70cb4a4" UNIQUE ("slug"), CONSTRAINT "PK_d43c664bcaafc0e8a06dfd34e05" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TABLE "conferences" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "year" integer NOT NULL, "slug" character varying NOT NULL, "title" character varying NOT NULL, "theme" character varying NOT NULL, "summary" text, "description" text, "startDate" date, "endDate" date, "isCurrent" boolean NOT NULL DEFAULT false, "publicationStatus" character varying NOT NULL DEFAULT 'DRAFT', "featuredMediaId" uuid, "publishedAt" TIMESTAMP WITH TIME ZONE, "scheduledAt" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "UQ_715d1a1f84c00f8837158595457" UNIQUE ("year"), CONSTRAINT "UQ_1d3f5f80c848e6d8f5a0f3b825e" UNIQUE ("slug"), CONSTRAINT "PK_d28afb89755d548215ce4e7667b" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TABLE "conference_programs" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "conferenceSummary" text, "isFeatured" boolean NOT NULL DEFAULT false, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "conferenceId" uuid NOT NULL, "programId" uuid NOT NULL, CONSTRAINT "PK_e6588233abe88636690122bf72c" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TABLE "events" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "slug" character varying NOT NULL, "title" character varying NOT NULL, "eventType" character varying NOT NULL, "summary" text, "description" text, "locationMode" character varying NOT NULL, "timezone" character varying NOT NULL DEFAULT 'Africa/Kigali', "startAt" TIMESTAMP WITH TIME ZONE NOT NULL, "endAt" TIMESTAMP WITH TIME ZONE NOT NULL, "capacity" integer, "registrationRequired" boolean NOT NULL DEFAULT false, "registrationOpensAt" TIMESTAMP WITH TIME ZONE, "registrationClosesAt" TIMESTAMP WITH TIME ZONE, "eventStatus" character varying NOT NULL DEFAULT 'PLANNED', "publicationStatus" character varying NOT NULL DEFAULT 'DRAFT', "isFeatured" boolean NOT NULL DEFAULT false, "featuredMediaId" uuid, "publishedAt" TIMESTAMP WITH TIME ZONE, "scheduledAt" TIMESTAMP WITH TIME ZONE, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "conferenceProgramId" uuid NOT NULL, "defaultVenueId" uuid, CONSTRAINT "PK_40731c7151fe4be3116e45ddf73" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE TABLE "attendees" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "firstName" character varying NOT NULL, "lastName" character varying NOT NULL, "email" character varying NOT NULL, "phone" character varying, "organization" character varying, "attendeeType" character varying NOT NULL, "status" character varying NOT NULL DEFAULT 'REGISTERED', "checkedIn" boolean NOT NULL DEFAULT false, "checkedInAt" TIMESTAMP WITH TIME ZONE, "notes" text, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "deletedAt" TIMESTAMP WITH TIME ZONE, "eventId" uuid, "sessionId" uuid, CONSTRAINT "chk_attendees_target" CHECK (("attendeeType" = 'EVENT' AND "eventId" IS NOT NULL AND "sessionId" IS NULL) OR ("attendeeType" = 'SESSION' AND "sessionId" IS NOT NULL AND "eventId" IS NULL)), CONSTRAINT "PK_0d01acb0e67860db61a6fb61a4a" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_attendees_session_email" ON "attendees"  ("sessionId", "email") WHERE "sessionId" IS NOT NULL AND "deletedAt" IS NULL`);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_attendees_event_email" ON "attendees"  ("eventId", "email") WHERE "eventId" IS NOT NULL AND "deletedAt" IS NULL`);
+    await queryRunner.query(`CREATE TABLE "media" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "targetType" character varying NOT NULL, "targetId" uuid NOT NULL, "mediaType" character varying NOT NULL, "sourceType" character varying NOT NULL, "title" character varying NOT NULL, "caption" text, "altText" text, "url" text NOT NULL, "storageKey" text, "mimeType" text, "fileSize" bigint, "durationSeconds" integer, "isFeatured" boolean NOT NULL DEFAULT false, "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_f4e0fcac36e050de337b670d8bd" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_media_target" ON "media"  ("targetType", "targetId") `);
+    await queryRunner.query(`CREATE TABLE "site_settings" ("setting_key" character varying(160) NOT NULL, "value" jsonb NOT NULL, "is_public" boolean NOT NULL DEFAULT false, "description" text, "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_1934695e327dbd254a6d0319947" PRIMARY KEY ("setting_key"))`);
+    await queryRunner.query(`CREATE TABLE "permissions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(100) NOT NULL, "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "chk_permissions_name_canonical" CHECK ("name" = LOWER(BTRIM("name"))), CONSTRAINT "PK_920331560282b8bd21bb02290df" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_permissions_name" ON "permissions"  ("name") `);
+    await queryRunner.query(`CREATE TABLE "roles" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "name" character varying(100) NOT NULL, "description" character varying(500), "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), "deleteAt" TIMESTAMP(3) WITH TIME ZONE, CONSTRAINT "chk_roles_name_canonical" CHECK ("name" = UPPER(BTRIM("name"))), CONSTRAINT "PK_c1433d71a4838793a49dcad46ab" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_roles_name" ON "roles"  ("name") `);
+    await queryRunner.query(`CREATE TABLE "users" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "firstname" character varying(150) NOT NULL, "lastname" character varying(150) NOT NULL, "username" character varying(150) NOT NULL, "email" character varying(254) NOT NULL, "emailVerifiedAt" TIMESTAMP(3) WITH TIME ZONE, "pendingEmail" character varying(254), "phone" character varying(30), "password" character varying(255) NOT NULL, "reference" bigint, "status" character varying(20) NOT NULL DEFAULT 'Active', "isLocked" boolean NOT NULL DEFAULT false, "lockedAt" TIMESTAMP(3) WITH TIME ZONE, "failedLoginAttempts" integer NOT NULL DEFAULT '0', "lockExpiresAt" TIMESTAMP(3) WITH TIME ZONE, "lastFailedLoginAt" TIMESTAMP(3) WITH TIME ZONE, "lastLoginAt" TIMESTAMP(3) WITH TIME ZONE, "lastLoginIp" character varying(45), "twoFactorSecret" text, "isTwoFactorEnabled" boolean NOT NULL DEFAULT false, "twoFactorVerifiedAt" TIMESTAMP(3) WITH TIME ZONE, "passwordChangedAt" TIMESTAMP(3) WITH TIME ZONE, "forcePasswordChange" boolean NOT NULL DEFAULT false, "refreshTokenHash" character varying(255), "tokenVersion" integer NOT NULL DEFAULT '0', "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "chk_users_token_version_non_negative" CHECK ("tokenVersion" >= 0), CONSTRAINT "chk_users_failed_login_attempts_non_negative" CHECK ("failedLoginAttempts" >= 0), CONSTRAINT "chk_users_pending_email_normalized" CHECK ("pendingEmail" IS NULL OR "pendingEmail" = LOWER(BTRIM("pendingEmail"))), CONSTRAINT "chk_users_email_normalized" CHECK ("email" = LOWER(BTRIM("email"))), CONSTRAINT "chk_users_username_normalized" CHECK ("username" = LOWER(BTRIM("username"))), CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_users_created_at" ON "users"  ("createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_users_status_locked" ON "users"  ("status", "isLocked") `);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_users_pending_email" ON "users"  ("pendingEmail") `);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_users_email" ON "users"  ("email") `);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_users_username" ON "users"  ("username") `);
+    await queryRunner.query(`CREATE TABLE "updates" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "title" character varying(160) NOT NULL, "message" text NOT NULL, "category" character varying NOT NULL DEFAULT 'ANNOUNCEMENT', "label" character varying(40), "publicationStatus" character varying NOT NULL DEFAULT 'DRAFT', "visibleFrom" TIMESTAMP WITH TIME ZONE, "visibleUntil" TIMESTAMP WITH TIME ZONE, "publishedAt" TIMESTAMP WITH TIME ZONE, "priority" integer NOT NULL DEFAULT '0', "actionLabel" character varying(50), "actionUrl" character varying(2000), "version" integer NOT NULL, "createdByUserId" uuid, "updatedByUserId" uuid, "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "conferenceId" uuid, "eventId" uuid, "sessionId" uuid, CONSTRAINT "ck_updates_category" CHECK ("category" IN ('ANNOUNCEMENT', 'PREPARATION', 'REGISTRATION', 'EVENT', 'GENERAL')), CONSTRAINT "ck_updates_status" CHECK ("publicationStatus" IN ('DRAFT', 'SCHEDULED', 'PUBLISHED', 'ARCHIVED')), CONSTRAINT "ck_updates_window" CHECK ("visibleUntil" IS NULL OR "visibleFrom" IS NULL OR "visibleUntil" > "visibleFrom"), CONSTRAINT "ck_updates_target" CHECK (num_nonnulls("conferenceId", "eventId", "sessionId") <= 1), CONSTRAINT "PK_6029912acac4189b62b8b57c880" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_updates_visibility" ON "updates"  ("publicationStatus", "visibleFrom", "visibleUntil") `);
+    await queryRunner.query(`CREATE TYPE "public"."audit_log_level_enum" AS ENUM('info', 'warn', 'error', 'debug')`);
+    await queryRunner.query(`CREATE TABLE "audit_logs" ("id" BIGSERIAL NOT NULL, "level" "public"."audit_log_level_enum" NOT NULL DEFAULT 'info', "category" character varying(100) NOT NULL DEFAULT 'application', "message" text NOT NULL, "method" character varying(16), "url" text, "statusCode" smallint, "durationMs" integer, "requestId" character varying(100), "traceId" character varying(100), "userId" uuid, "ipAddress" character varying(64), "userAgent" text, "device" jsonb, "errorName" character varying(255), "errorStack" text, "metadata" jsonb NOT NULL DEFAULT '{}'::jsonb, "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_1bb179d048bbc581caa3b013439" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_audit_logs_created_at" ON "audit_logs"  ("createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_audit_logs_trace_id" ON "audit_logs"  ("traceId") `);
+    await queryRunner.query(`CREATE INDEX "idx_audit_logs_request_id" ON "audit_logs"  ("requestId") `);
+    await queryRunner.query(`CREATE INDEX "idx_audit_logs_user_created_at" ON "audit_logs"  ("userId", "createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_audit_logs_category_created_at" ON "audit_logs"  ("category", "createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_audit_logs_level_created_at" ON "audit_logs"  ("level", "createdAt") `);
+    await queryRunner.query(`CREATE TABLE "auth_sessions" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "userId" uuid NOT NULL, "tokenHash" character varying(64) NOT NULL, "familyId" character varying(64) NOT NULL, "expiresAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL, "revokedAt" TIMESTAMP(3) WITH TIME ZONE, "revokeReason" character varying(100), "ip" character varying(45), "userAgent" character varying(1024), "lastUsedAt" TIMESTAMP(3) WITH TIME ZONE, "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "chk_auth_sessions_family_id_not_blank" CHECK (LENGTH(BTRIM("familyId")) > 0), CONSTRAINT "chk_auth_sessions_token_hash" CHECK ("tokenHash" ~ '^[0-9a-f]{64}$'), CONSTRAINT "PK_641507381f32580e8479efc36cd" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_auth_sessions_expires_at" ON "auth_sessions"  ("expiresAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_auth_sessions_family_revoked" ON "auth_sessions"  ("familyId", "revokedAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_auth_sessions_family" ON "auth_sessions"  ("familyId") `);
+    await queryRunner.query(`CREATE INDEX "idx_auth_sessions_user_expires" ON "auth_sessions"  ("userId", "expiresAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_auth_sessions_user_revoked" ON "auth_sessions"  ("userId", "revokedAt") `);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_auth_sessions_token_hash" ON "auth_sessions"  ("tokenHash") `);
+    await queryRunner.query(`CREATE TABLE "auth_tokens" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "userId" uuid NOT NULL, "tokenHash" character varying(64) NOT NULL, "purpose" character varying(30) NOT NULL, "expiresAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL, "consumedAt" TIMESTAMP(3) WITH TIME ZONE, "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "chk_auth_tokens_purpose" CHECK ("purpose" IN (
+    'EMAIL_VERIFICATION',
+    'PASSWORD_RESET',
+    'INVITATION',
+    'MFA_LOGIN'
+  )), CONSTRAINT "chk_auth_tokens_token_hash" CHECK ("tokenHash" ~ '^[0-9a-f]{64}$'), CONSTRAINT "PK_41e9ddfbb32da18c4e85e45c2fd" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_auth_tokens_created_at" ON "auth_tokens"  ("createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_auth_tokens_expires_at" ON "auth_tokens"  ("expiresAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_auth_tokens_user_purpose_consumed" ON "auth_tokens"  ("userId", "purpose", "consumedAt") `);
+    await queryRunner.query(`CREATE UNIQUE INDEX "uq_auth_tokens_token_hash" ON "auth_tokens"  ("tokenHash") `);
+    await queryRunner.query(`CREATE TABLE "login_attempts" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "userId" uuid, "identifierHash" character varying(64) NOT NULL, "ip" character varying(45) NOT NULL, "userAgent" character varying(1024), "result" character varying(20) NOT NULL, "reason" character varying(64), "createdAt" TIMESTAMP(3) WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "chk_login_attempt_result" CHECK ("result" IN (
+    'SUCCESS',
+    'FAILURE',
+    'LOCKED',
+    'MFA_REQUIRED'
+  )), CONSTRAINT "chk_login_attempt_identifier_hash" CHECK ("identifierHash" ~ '^[0-9a-f]{64}$'), CONSTRAINT "PK_070e613c8f768b1a70742705c5b" PRIMARY KEY ("id"))`);
+    await queryRunner.query(`CREATE INDEX "idx_login_attempts_created_at" ON "login_attempts"  ("createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_login_attempts_result_created" ON "login_attempts"  ("result", "createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_login_attempts_user_created" ON "login_attempts"  ("userId", "createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_login_attempts_ip_created" ON "login_attempts"  ("ip", "createdAt") `);
+    await queryRunner.query(`CREATE INDEX "idx_login_attempts_identifier_created" ON "login_attempts"  ("identifierHash", "createdAt") `);
+    await queryRunner.query(`CREATE TABLE "roles_permissions" ("roleId" uuid NOT NULL, "permissionId" uuid NOT NULL, CONSTRAINT "PK_5829481fc2a13d85b9b6bf3bd53" PRIMARY KEY ("roleId", "permissionId"))`);
+    await queryRunner.query(`CREATE INDEX "IDX_28bf280551eb9aa82daf1e156d" ON "roles_permissions"  ("roleId") `);
+    await queryRunner.query(`CREATE INDEX "IDX_31cf5c31d0096f706e3ba3b1e8" ON "roles_permissions"  ("permissionId") `);
+    await queryRunner.query(`CREATE TABLE "users_roles" ("userId" uuid NOT NULL, "roleId" uuid NOT NULL, CONSTRAINT "PK_a472bd14ea5d26f611025418d57" PRIMARY KEY ("userId", "roleId"))`);
+    await queryRunner.query(`CREATE INDEX "IDX_776b7cf9330802e5ef5a8fb18d" ON "users_roles"  ("userId") `);
+    await queryRunner.query(`CREATE INDEX "IDX_4fb14631257670efa14b15a3d8" ON "users_roles"  ("roleId") `);
+    await queryRunner.query(`ALTER TABLE "invitation_roles" ADD CONSTRAINT "FK_32e9157dd516fe786b1d7687ab0" FOREIGN KEY ("invitationId") REFERENCES "invitations"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "invitations" ADD CONSTRAINT "FK_f486f35d305965a473eaee90feb" FOREIGN KEY ("inviteeId") REFERENCES "invitees"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "invitations" ADD CONSTRAINT "FK_8dfdd031adb35b7e19733430b6f" FOREIGN KEY ("eventId") REFERENCES "events"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "invitations" ADD CONSTRAINT "FK_0eb234af456cac8bf6d1dad516d" FOREIGN KEY ("sessionId", "eventId") REFERENCES "sessions"("id","eventId") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "sessions" ADD CONSTRAINT "FK_61e25b191dd6844e30ff86e91ff" FOREIGN KEY ("eventId") REFERENCES "events"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "sessions" ADD CONSTRAINT "FK_0978abed1ad5792554fdb75467d" FOREIGN KEY ("venueId") REFERENCES "venues"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "conference_programs" ADD CONSTRAINT "FK_494ea44da394a1bcc3ca67c2c20" FOREIGN KEY ("conferenceId") REFERENCES "conferences"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "conference_programs" ADD CONSTRAINT "FK_9c9f7cc9bc5451c581e6d08686c" FOREIGN KEY ("programId") REFERENCES "programs"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "events" ADD CONSTRAINT "FK_192a68de310d4ca81ca1a901832" FOREIGN KEY ("conferenceProgramId") REFERENCES "conference_programs"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "events" ADD CONSTRAINT "FK_85d88b64f37c338990cc5a16cd4" FOREIGN KEY ("defaultVenueId") REFERENCES "venues"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "attendees" ADD CONSTRAINT "FK_4925989ece225c9c203da5c225c" FOREIGN KEY ("eventId") REFERENCES "events"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "attendees" ADD CONSTRAINT "FK_9745dcd0e4dfb72736a9b7256a0" FOREIGN KEY ("sessionId") REFERENCES "sessions"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "updates" ADD CONSTRAINT "fk_updates_conference" FOREIGN KEY ("conferenceId") REFERENCES "conferences"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "updates" ADD CONSTRAINT "fk_updates_event" FOREIGN KEY ("eventId") REFERENCES "events"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "updates" ADD CONSTRAINT "fk_updates_session" FOREIGN KEY ("sessionId") REFERENCES "sessions"("id") ON DELETE RESTRICT ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "updates" ADD CONSTRAINT "fk_updates_creator" FOREIGN KEY ("createdByUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "updates" ADD CONSTRAINT "fk_updates_editor" FOREIGN KEY ("updatedByUserId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "auth_sessions" ADD CONSTRAINT "FK_925b24d7fc2f9324ce972aee025" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "auth_tokens" ADD CONSTRAINT "FK_c25fb956ebada4b256501585cca" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+    await queryRunner.query(`ALTER TABLE "roles_permissions" ADD CONSTRAINT "FK_28bf280551eb9aa82daf1e156d9" FOREIGN KEY ("roleId") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+    await queryRunner.query(`ALTER TABLE "roles_permissions" ADD CONSTRAINT "FK_31cf5c31d0096f706e3ba3b1e82" FOREIGN KEY ("permissionId") REFERENCES "permissions"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+    await queryRunner.query(`ALTER TABLE "users_roles" ADD CONSTRAINT "FK_776b7cf9330802e5ef5a8fb18dc" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+    await queryRunner.query(`ALTER TABLE "users_roles" ADD CONSTRAINT "FK_4fb14631257670efa14b15a3d86" FOREIGN KEY ("roleId") REFERENCES "roles"("id") ON DELETE CASCADE ON UPDATE CASCADE`);
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`ALTER TABLE "users_roles" DROP CONSTRAINT "FK_4fb14631257670efa14b15a3d86"`);
+    await queryRunner.query(`ALTER TABLE "users_roles" DROP CONSTRAINT "FK_776b7cf9330802e5ef5a8fb18dc"`);
+    await queryRunner.query(`ALTER TABLE "roles_permissions" DROP CONSTRAINT "FK_31cf5c31d0096f706e3ba3b1e82"`);
+    await queryRunner.query(`ALTER TABLE "roles_permissions" DROP CONSTRAINT "FK_28bf280551eb9aa82daf1e156d9"`);
+    await queryRunner.query(`ALTER TABLE "auth_tokens" DROP CONSTRAINT "FK_c25fb956ebada4b256501585cca"`);
+    await queryRunner.query(`ALTER TABLE "auth_sessions" DROP CONSTRAINT "FK_925b24d7fc2f9324ce972aee025"`);
+    await queryRunner.query(`ALTER TABLE "updates" DROP CONSTRAINT "fk_updates_editor"`);
+    await queryRunner.query(`ALTER TABLE "updates" DROP CONSTRAINT "fk_updates_creator"`);
+    await queryRunner.query(`ALTER TABLE "updates" DROP CONSTRAINT "fk_updates_session"`);
+    await queryRunner.query(`ALTER TABLE "updates" DROP CONSTRAINT "fk_updates_event"`);
+    await queryRunner.query(`ALTER TABLE "updates" DROP CONSTRAINT "fk_updates_conference"`);
+    await queryRunner.query(`ALTER TABLE "attendees" DROP CONSTRAINT "FK_9745dcd0e4dfb72736a9b7256a0"`);
+    await queryRunner.query(`ALTER TABLE "attendees" DROP CONSTRAINT "FK_4925989ece225c9c203da5c225c"`);
+    await queryRunner.query(`ALTER TABLE "events" DROP CONSTRAINT "FK_85d88b64f37c338990cc5a16cd4"`);
+    await queryRunner.query(`ALTER TABLE "events" DROP CONSTRAINT "FK_192a68de310d4ca81ca1a901832"`);
+    await queryRunner.query(`ALTER TABLE "conference_programs" DROP CONSTRAINT "FK_9c9f7cc9bc5451c581e6d08686c"`);
+    await queryRunner.query(`ALTER TABLE "conference_programs" DROP CONSTRAINT "FK_494ea44da394a1bcc3ca67c2c20"`);
+    await queryRunner.query(`ALTER TABLE "sessions" DROP CONSTRAINT "FK_0978abed1ad5792554fdb75467d"`);
+    await queryRunner.query(`ALTER TABLE "sessions" DROP CONSTRAINT "FK_61e25b191dd6844e30ff86e91ff"`);
+    await queryRunner.query(`ALTER TABLE "invitations" DROP CONSTRAINT "FK_0eb234af456cac8bf6d1dad516d"`);
+    await queryRunner.query(`ALTER TABLE "invitations" DROP CONSTRAINT "FK_8dfdd031adb35b7e19733430b6f"`);
+    await queryRunner.query(`ALTER TABLE "invitations" DROP CONSTRAINT "FK_f486f35d305965a473eaee90feb"`);
+    await queryRunner.query(`ALTER TABLE "invitation_roles" DROP CONSTRAINT "FK_32e9157dd516fe786b1d7687ab0"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_4fb14631257670efa14b15a3d8"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_776b7cf9330802e5ef5a8fb18d"`);
+    await queryRunner.query(`DROP TABLE "users_roles"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_31cf5c31d0096f706e3ba3b1e8"`);
+    await queryRunner.query(`DROP INDEX "public"."IDX_28bf280551eb9aa82daf1e156d"`);
+    await queryRunner.query(`DROP TABLE "roles_permissions"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_login_attempts_identifier_created"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_login_attempts_ip_created"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_login_attempts_user_created"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_login_attempts_result_created"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_login_attempts_created_at"`);
+    await queryRunner.query(`DROP TABLE "login_attempts"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_auth_tokens_token_hash"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_tokens_user_purpose_consumed"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_tokens_expires_at"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_tokens_created_at"`);
+    await queryRunner.query(`DROP TABLE "auth_tokens"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_auth_sessions_token_hash"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_sessions_user_revoked"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_sessions_user_expires"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_sessions_family"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_sessions_family_revoked"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_auth_sessions_expires_at"`);
+    await queryRunner.query(`DROP TABLE "auth_sessions"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_level_created_at"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_category_created_at"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_user_created_at"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_request_id"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_trace_id"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_audit_logs_created_at"`);
+    await queryRunner.query(`DROP TABLE "audit_logs"`);
+    await queryRunner.query(`DROP TYPE "public"."audit_log_level_enum"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_updates_visibility"`);
+    await queryRunner.query(`DROP TABLE "updates"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_users_username"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_users_email"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_users_pending_email"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_users_status_locked"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_users_created_at"`);
+    await queryRunner.query(`DROP TABLE "users"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_roles_name"`);
+    await queryRunner.query(`DROP TABLE "roles"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_permissions_name"`);
+    await queryRunner.query(`DROP TABLE "permissions"`);
+    await queryRunner.query(`DROP TABLE "site_settings"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_media_target"`);
+    await queryRunner.query(`DROP TABLE "media"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_attendees_event_email"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_attendees_session_email"`);
+    await queryRunner.query(`DROP TABLE "attendees"`);
+    await queryRunner.query(`DROP TABLE "events"`);
+    await queryRunner.query(`DROP TABLE "conference_programs"`);
+    await queryRunner.query(`DROP TABLE "conferences"`);
+    await queryRunner.query(`DROP TABLE "programs"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_sessions_id_event"`);
+    await queryRunner.query(`DROP TABLE "sessions"`);
+    await queryRunner.query(`DROP TABLE "invitations"`);
+    await queryRunner.query(`DROP TYPE "public"."invitations_publicationstatus_enum"`);
+    await queryRunner.query(`DROP TYPE "public"."invitations_attendancestatus_enum"`);
+    await queryRunner.query(`DROP TYPE "public"."invitations_status_enum"`);
+    await queryRunner.query(`DROP TYPE "public"."invitations_scope_enum"`);
+    await queryRunner.query(`DROP TABLE "invitees"`);
+    await queryRunner.query(`DROP TYPE "public"."invitees_title_enum"`);
+    await queryRunner.query(`DROP TYPE "public"."invitees_inviteetype_enum"`);
+    await queryRunner.query(`DROP TABLE "invitation_roles"`);
+    await queryRunner.query(`DROP TYPE "public"."invitation_roles_role_enum"`);
+    await queryRunner.query(`DROP TABLE "venues"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_processed_events_processed_at"`);
+    await queryRunner.query(`DROP TABLE "processed_events"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_outbox_events_dispatch"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_outbox_events_lease"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_outbox_events_aggregate"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_outbox_events_published_at"`);
+    await queryRunner.query(`DROP TABLE "outbox_events"`);
+    await queryRunner.query(`DROP TYPE "public"."outbox_status_enum"`);
+    await queryRunner.query(`DROP INDEX "public"."uq_dead_letter_events_dead_letter_id"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_dead_letter_events_event_id"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_dead_letter_events_queue_failed_at"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_dead_letter_events_replayed_at"`);
+    await queryRunner.query(`DROP INDEX "public"."idx_dead_letter_events_created_at"`);
+    await queryRunner.query(`DROP TABLE "dead_letter_events"`);
+  }
+}
+

@@ -1,0 +1,75 @@
+services:
+  api:
+    image: ${SERVER_IMAGE:-nezeza-ijuru-server-staging:local}
+    build:
+      context: .
+      args:
+        NODE_ENV: staging
+    env_file:
+      - path: .env.staging
+        required: true
+    environment:
+      NODE_ENV: staging
+      HOST: 0.0.0.0
+      PORT: 3000
+      APP_ROLE: all
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: staging_db
+      DATABASE_USERNAME: staginguser
+      DATABASE_SSL: 'false'
+      DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
+      DATABASE_SYNCHRONIZE: 'false'
+      DATABASE_MIGRATIONS: 'true'
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TLS: 'false'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    ports:
+      - '127.0.0.1:10322:3000'
+
+  postgres:
+    image: postgres:17-alpine
+    env_file:
+      - path: .env.staging
+        required: true
+    environment:
+      POSTGRES_DB: staging_db
+      POSTGRES_USER: staginguser
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env.staging}
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U staginguser -d staging_db']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    env_file:
+      - path: .env.staging
+        required: true
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - staging_redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  staging_postgres_data:
+  staging_redis_data:

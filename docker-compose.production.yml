@@ -1,0 +1,72 @@
+services:
+  api:
+    image: ${SERVER_IMAGE:-nezeza-ijuru-server:local}
+    build: .
+    env_file:
+      - path: .env.production
+        required: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      APP_ROLE: all
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_NAME: nezeza_ijuru
+      DATABASE_USERNAME: nezeza_app
+      DATABASE_SSL: 'false'
+      DATABASE_SSL_REJECT_UNAUTHORIZED: 'false'
+      DATABASE_SYNCHRONIZE: 'false'
+      DATABASE_MIGRATIONS: 'true'
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_TLS: 'false'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    init: true
+    ports:
+      - '127.0.0.1:10321:3000'
+
+  postgres:
+    image: postgres:17-alpine
+    env_file:
+      - path: .env.production
+        required: true
+    environment:
+      POSTGRES_DB: nezeza_ijuru
+      POSTGRES_USER: nezeza_app
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD must be set in .env.production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nezeza_app -d nezeza_ijuru']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    env_file:
+      - path: .env.production
+        required: true
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$${REDIS_PASSWORD}" ping | grep PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  redis_data:

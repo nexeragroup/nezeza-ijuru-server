@@ -1,0 +1,15 @@
+export enum Codes {
+  PAYMENT_METHOD = 'Payment Method',
+  TAX_TYPE = 'Tax Type',
+  PRODUCT_TYPE = 'Product Type',
+  COUNTRY_CODE = 'Country Code',
+  PACKAGE_UNIT = 'Package Unit',
+  QUANTITY_UNIT = 'Quantity Unit',
+  CURRENCY = 'Currency',
+  TRANSACTION_TYPE = 'Transaction Type',
+  RECEIPT_TYPE = 'Receipt Type',
+  TRANSACTION_PROGRESS = 'Transaction Progress',
+  REFUND_REASON = 'Refund Reason',
+  IMPORT_ITEM_STATUS = 'Import Item Status',
+  STOCK_MOVEMENT = 'Stock Movement',
+}

@@ -2,6 +2,7 @@
 /dist
 /node_modules
 /build
+*.tsbuildinfo
 
 # Logs
 logs
@@ -38,7 +39,9 @@ lerna-debug.log*
 # dotenv environment variable files
 .env
 .env.development.local
+.env.development
 .env.test.local
+.env.test
 .env.production.local
 .env.production
 .env.staging

@@ -5,7 +5,7 @@ FROM node:24.15-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml nest-cli.json tsconfig*.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml nest-cli.json tsconfig*.json ./
 RUN pnpm install --frozen-lockfile
 
 COPY src ./src
@@ -22,7 +22,7 @@ ENV NODE_ENV=${NODE_ENV} \
 WORKDIR /app
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile && pnpm store prune
 
 COPY --from=build --chown=node:node /app/dist ./dist

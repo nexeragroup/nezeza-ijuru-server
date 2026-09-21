@@ -26,6 +26,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile && pnpm store prune
 
 COPY --from=build --chown=node:node /app/dist ./dist
+RUN mkdir -p /app/storage && chown node:node /app/storage
 
 USER node
 EXPOSE 3000

@@ -28,6 +28,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
     init: true
+    volumes:
+      - storage_data:/app/storage
     ports:
       - '127.0.0.1:10321:3000'
 
@@ -68,5 +70,6 @@ services:
       retries: 10
 
 volumes:
+  storage_data:
   postgres_data:
   redis_data:

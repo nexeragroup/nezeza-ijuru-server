@@ -31,6 +31,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
     init: true
+    volumes:
+      - staging_storage_data:/app/storage
     ports:
       - '127.0.0.1:10322:3000'
 
@@ -71,5 +73,6 @@ services:
       retries: 10
 
 volumes:
+  staging_storage_data:
   staging_postgres_data:
   staging_redis_data:

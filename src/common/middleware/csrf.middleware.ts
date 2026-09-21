@@ -37,8 +37,8 @@ const CSRF_EXCLUDED_ROUTES: readonly CsrfExcludedRoute[] = [
     match: 'prefix',
   },
   {
-    path: '/conferences/all',
-    methods: ['GET'],
+    path: '/auth/login',
+    methods: ['POST'],
     match: 'exact',
   },
 ];

@@ -292,7 +292,7 @@ export class AuthController {
      */
     response.clearCookie('refresh_token', this.cookieOptions(true));
 
-    response.clearCookie('XSRF-TOKEN', this.cookieOptions(false));
+    response.clearCookie('XSRF-TOKEN', this.csrfCookieOptions());
 
     response.clearCookie(this.getSessionCookieName(), this.cookieOptions(true));
 
@@ -546,7 +546,7 @@ export class AuthController {
      * Angular/browser code must be able to read this token and
      * return it using X-XSRF-TOKEN, therefore httpOnly=false.
      */
-    response.cookie('XSRF-TOKEN', csrfToken, this.cookieOptions(false));
+    response.cookie('XSRF-TOKEN', csrfToken, this.csrfCookieOptions());
   }
 
   /**
@@ -574,6 +574,14 @@ export class AuthController {
       secure,
       sameSite,
       path: '/',
+    };
+  }
+
+  private csrfCookieOptions(): CookieOptions {
+    return {
+      ...this.cookieOptions(false),
+      domain:
+        this.config.get<string>('security.csrfCookieDomain') || undefined,
     };
   }
 

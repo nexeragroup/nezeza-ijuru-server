@@ -53,7 +53,11 @@ lerna-debug.log*
 .tmp
 
 # Runtime data
-/storage/
+/storage/*
+!/storage/.gitkeep
+!/storage/*/
+/storage/*/*
+!/storage/*/.gitkeep
 pids
 *.pid
 *.seed

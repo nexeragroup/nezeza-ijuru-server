@@ -50,9 +50,15 @@ export function configureHttpApplication(
   /*
    * Security headers should be registered before application
    * routes and middleware responses.
-   */
+  */
   if (config.get<boolean>('security.helmetEnabled', true)) {
-    app.use(helmet());
+    app.use(
+      helmet({
+        crossOriginResourcePolicy: {
+          policy: 'cross-origin',
+        },
+      }),
+    );
   }
 
   configureCors(app, config);

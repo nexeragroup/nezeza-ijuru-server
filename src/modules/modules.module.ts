@@ -8,6 +8,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { BackupsModule } from './backups/backups.module';
 import { MailsModule } from './mails/mails.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { MailsModule } from './mails/mails.module';
     CryptoModule,
     BackupsModule,
     MailsModule,
+    StorageModule,
   ],
   controllers: [],
   providers: [],

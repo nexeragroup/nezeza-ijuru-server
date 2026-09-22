@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { MediaService } from './media.service';
+import { StorageService } from '../../modules/storage/services/storage.service';
 
 describe('MediaService', () => {
   let service: MediaService;
@@ -9,7 +10,11 @@ describe('MediaService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MediaService,
-        { provide: ConfigService, useValue: { get: (_key: string, fallback: unknown) => fallback } },
+        { provide: StorageService, useValue: {} },
+        {
+          provide: ConfigService,
+          useValue: { get: (_key: string, fallback: unknown) => fallback },
+        },
       ],
     }).compile();
 

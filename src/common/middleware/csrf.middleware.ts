@@ -142,9 +142,7 @@ export class CsrfMiddleware implements NestMiddleware {
 
         domain:
           this.config.get<string>('security.csrfCookieDomain') || undefined,
-
         secure: this.config.get<boolean>('security.secureCookies', false),
-
         sameSite: this.getSameSitePolicy(),
       });
     }

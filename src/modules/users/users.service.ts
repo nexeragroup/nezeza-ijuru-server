@@ -116,7 +116,7 @@ export class UsersService {
   findAllUsers(query: ListUsersQuery = {}): Promise<UsersEntity[]> {
     const pagination = normalizePagination(query, 100);
     return this.usersRepository.find({
-      relations: { roles: true },
+      relations: { roles: { permissions: true } },
       order: { createdAt: 'DESC', id: 'ASC' },
       skip: pagination.skip,
       take: pagination.take,
@@ -129,16 +129,15 @@ export class UsersService {
       .where('user.id = :id', {
         id,
       })
-      .leftJoinAndSelect('user.roles', 'role');
+      .leftJoinAndSelect('user.roles', 'role')
+      .leftJoinAndSelect('role.permissions', 'permission');
 
     if (includeSecrets) {
-      query
-        .leftJoinAndSelect('role.permissions', 'permission')
-        .addSelect([
-          'user.password',
-          'user.refreshTokenHash',
-          'user.twoFactorSecret',
-        ]);
+      query.addSelect([
+        'user.password',
+        'user.refreshTokenHash',
+        'user.twoFactorSecret',
+      ]);
     }
     const user = await query.getOne();
     if (!user) {
@@ -157,7 +156,7 @@ export class UsersService {
     return this.usersRepository.findOne({
       where: { username: this.normalizeUsername(username) },
       relations: {
-        roles: true,
+        roles: { permissions: true },
       },
     });
   }
@@ -169,7 +168,7 @@ export class UsersService {
     return this.usersRepository.findOne({
       where: { email: this.normalizeEmail(email) },
       relations: {
-        roles: true,
+        roles: { permissions: true },
       },
     });
   }
@@ -510,7 +509,7 @@ export class UsersService {
          */
         const userWithRoles = await repository.findOne({
           where: { id },
-          relations: { roles: true },
+          relations: { roles: { permissions: true } },
         });
 
         if (!userWithRoles) {

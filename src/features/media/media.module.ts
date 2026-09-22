@@ -9,9 +9,11 @@ import { SessionsEntity } from '../sessions/entity/sessions.entity';
 import { MediaEntity } from './entity/media.entity';
 import { LivestreamService } from './livestream.service';
 import { YoutubeService } from './youtube.service';
+import { StorageModule } from '../../modules/storage/storage.module';
 
 @Module({
   imports: [
+    StorageModule,
     TypeOrmModule.forFeature([
       MediaEntity,
       ConferencesEntity,

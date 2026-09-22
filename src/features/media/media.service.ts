@@ -2,13 +2,9 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { randomUUID } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { Repository } from 'typeorm';
 import {
   normalizePagination,
@@ -31,10 +27,11 @@ import {
   MediaType,
 } from '../../common/enums/media.enum';
 import { BULK_CREATE_LIMIT } from '../../common/constants/bulk.constant';
+import { FileType } from '../../modules/storage/enums/file-type.enum';
+import { StorageService } from '../../modules/storage/services/storage.service';
 
 @Injectable()
-export class MediaService implements OnModuleInit {
-  private readonly localPath: string;
+export class MediaService {
   private readonly publicBaseUrl: string;
 
   constructor(
@@ -49,20 +46,12 @@ export class MediaService implements OnModuleInit {
     @InjectRepository(SessionsEntity)
     private readonly sessionsRepository: Repository<SessionsEntity>,
     private readonly config: ConfigService,
+    private readonly storage: StorageService,
   ) {
-    this.localPath = resolve(
-      this.config.get<string>('storage.localPath', './storage'),
-    );
-    const appPublicUrl = this.config.get<string>('app.publicUrl')?.replace(/\/+$/, '');
-    this.publicBaseUrl = this.config
-      .get<string>('storage.publicBaseUrl', `${appPublicUrl || 'http://localhost:3300'}/media`)
-      .replace(/\/$/, '');
-  }
-
-  async onModuleInit(): Promise<void> {
-    if (this.config.get<string>('storage.provider', 'local') === 'local') {
-      await mkdir(this.localPath, { recursive: true });
-    }
+    const appPublicUrl = this.config
+      .get<string>('app.publicUrl')
+      ?.replace(/\/+$/, '');
+    this.publicBaseUrl = `${appPublicUrl || 'http://localhost:3300'}/api/v1/media/files`;
   }
 
   async findForTarget(
@@ -168,6 +157,8 @@ export class MediaService implements OnModuleInit {
         items.map(
           ({
             id,
+            targetType,
+            targetId,
             title,
             caption,
             altText,
@@ -175,8 +166,12 @@ export class MediaService implements OnModuleInit {
             mediaType,
             sourceType,
             mimeType,
+            isFeatured,
+            createdAt,
           }) => ({
             id,
+            targetType,
+            targetId,
             title,
             caption,
             altText,
@@ -184,6 +179,8 @@ export class MediaService implements OnModuleInit {
             mediaType,
             sourceType,
             mimeType,
+            isFeatured,
+            createdAt,
           }),
         ),
         total,
@@ -203,12 +200,15 @@ export class MediaService implements OnModuleInit {
       );
     }
     await this.assertTargetExists(dto.targetType, dto.targetId);
-    const detected = await this.detectFile(file.buffer, dto.mediaType);
-    const extension = `.${detected.ext}`;
-    const storageKey = `${randomUUID()}${extension}`;
-    await writeFile(resolve(this.localPath, storageKey), file.buffer, {
-      flag: 'wx',
-    });
+    const stored = await this.storage.upload(
+      { fileType: this.fileTypeFor(dto.mediaType) },
+      file,
+    );
+    if (!stored.storageKey) {
+      await this.storage.remove(stored.id);
+      throw new BadRequestException('The uploaded file was not stored locally');
+    }
+    const storageKey = stored.storageKey;
     try {
       return await this.mediaRepository.save(
         this.mediaRepository.create({
@@ -216,8 +216,8 @@ export class MediaService implements OnModuleInit {
           sourceType: MediaSourceType.UPLOAD,
           url: `${this.publicBaseUrl}/${storageKey}`,
           storageKey,
-          mimeType: detected.mime,
-          fileSize: String(file.size),
+          mimeType: stored.mimeType,
+          fileSize: String(stored.fileSize),
           caption: dto.caption ?? null,
           altText: dto.altText ?? null,
           durationSeconds: dto.durationSeconds ?? null,
@@ -225,31 +225,19 @@ export class MediaService implements OnModuleInit {
         }),
       );
     } catch (error) {
-      await unlink(resolve(this.localPath, storageKey)).catch(() => undefined);
+      await this.storage.removeByKey(storageKey);
       throw error;
     }
   }
 
-  async detectFile(buffer: Buffer, type: MediaType) {
-    const { fileTypeFromBuffer } = await import('file-type');
-    const detected = await fileTypeFromBuffer(buffer).catch(() => undefined);
-    if (!detected)
-      throw new BadRequestException('Unsupported or invalid media file');
-    this.assertFileMatchesType(type, detected.mime);
-    return detected;
-  }
-
-  async detectStoredFile(path: string, type: MediaType) {
-    const { fileTypeFromFile } = await import('file-type');
-    const detected = await fileTypeFromFile(path).catch(() => undefined);
-    if (!detected)
-      throw new BadRequestException('Unsupported or invalid media file');
-    this.assertFileMatchesType(type, detected.mime);
-    return detected;
-  }
-
   async publicFile(key: string) {
-    if (!/^[a-f0-9-]{36}\.[a-z0-9]+$/i.test(key)) throw new NotFoundException();
+    if (
+      !/^(?:[a-f0-9-]{36}\.[a-z0-9]+|(images|videos|documents|other)\/[a-f0-9-]{36}\.[a-z0-9]+)$/i.test(
+        key,
+      )
+    ) {
+      throw new NotFoundException();
+    }
     const media = await this.mediaRepository.findOneBy({ storageKey: key });
     if (!media) throw new NotFoundException();
     let conferenceId: string;
@@ -290,37 +278,10 @@ export class MediaService implements OnModuleInit {
     )
       throw new NotFoundException();
     return {
-      path: resolve(this.localPath, key),
+      path: this.storage.pathForKey(key),
       mediaType: media.mediaType,
       mimeType: media.mimeType,
     };
-  }
-
-  private assertFileMatchesType(type: MediaType, mimeType: string): void {
-    const matches = {
-      [MediaType.IMAGE]: [
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-        'image/gif',
-      ].includes(mimeType),
-      [MediaType.VIDEO]: mimeType.startsWith('video/'),
-      [MediaType.AUDIO]: mimeType.startsWith('audio/'),
-      [MediaType.PODCAST]: mimeType.startsWith('audio/'),
-      [MediaType.DOCUMENT]: [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.ms-powerpoint',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      ].includes(mimeType),
-      [MediaType.OTHER]: false,
-    }[type];
-    if (!matches) {
-      throw new BadRequestException(
-        `The uploaded file does not match media type ${type}`,
-      );
-    }
   }
 
   async update(id: string, dto: UpdateMediaDto): Promise<MediaEntity> {
@@ -339,10 +300,17 @@ export class MediaService implements OnModuleInit {
     const media = await this.findOne(id);
     await this.mediaRepository.remove(media);
     if (media.storageKey) {
-      await unlink(resolve(this.localPath, media.storageKey)).catch(
-        () => undefined,
-      );
+      await this.storage.removeByKey(media.storageKey);
     }
+  }
+
+  private fileTypeFor(type: MediaType): FileType {
+    if (type === MediaType.IMAGE) return FileType.IMAGE;
+    if (type === MediaType.VIDEO) return FileType.VIDEO;
+    if (type === MediaType.AUDIO || type === MediaType.PODCAST)
+      return FileType.AUDIO;
+    if (type === MediaType.DOCUMENT) return FileType.DOCUMENT;
+    return FileType.OTHER;
   }
 
   private async findOne(id: string): Promise<MediaEntity> {
@@ -371,29 +339,47 @@ export class MediaService implements OnModuleInit {
     id: string,
   ): Promise<void> {
     if (type === MediaTargetType.CONFERENCE) {
-      if (!(await this.conferencesRepository.existsBy({ id, publicationStatus: PublicationStatus.PUBLISHED }))) {
+      if (
+        !(await this.conferencesRepository.existsBy({
+          id,
+          publicationStatus: PublicationStatus.PUBLISHED,
+        }))
+      ) {
         throw new NotFoundException('Published conference not found');
       }
       return;
     }
 
     if (type === MediaTargetType.CONFERENCE_PROGRAM) {
-      const placement = await this.conferenceProgramsRepository.findOneBy({ id });
-      if (!placement || !(await this.conferencesRepository.existsBy({
-        id: placement.conferenceId,
-        publicationStatus: PublicationStatus.PUBLISHED,
-      }))) {
+      const placement = await this.conferenceProgramsRepository.findOneBy({
+        id,
+      });
+      if (
+        !placement ||
+        !(await this.conferencesRepository.existsBy({
+          id: placement.conferenceId,
+          publicationStatus: PublicationStatus.PUBLISHED,
+        }))
+      ) {
         throw new NotFoundException('Published conference program not found');
       }
       return;
     }
 
-    const target = type === MediaTargetType.EVENT
-      ? await this.eventsRepository.findOneBy({ id, publicationStatus: PublicationStatus.PUBLISHED })
-      : await this.sessionsRepository.findOneBy({ id, publicationStatus: PublicationStatus.PUBLISHED });
-    const eventId = type === MediaTargetType.EVENT
-      ? id
-      : (target as SessionsEntity | null)?.eventId;
+    const target =
+      type === MediaTargetType.EVENT
+        ? await this.eventsRepository.findOneBy({
+            id,
+            publicationStatus: PublicationStatus.PUBLISHED,
+          })
+        : await this.sessionsRepository.findOneBy({
+            id,
+            publicationStatus: PublicationStatus.PUBLISHED,
+          });
+    const eventId =
+      type === MediaTargetType.EVENT
+        ? id
+        : (target as SessionsEntity | null)?.eventId;
     const event = eventId
       ? await this.eventsRepository.findOneBy({
           id: eventId,
@@ -401,13 +387,20 @@ export class MediaService implements OnModuleInit {
         })
       : null;
     const placement = event
-      ? await this.conferenceProgramsRepository.findOneBy({ id: event.conferenceProgramId })
+      ? await this.conferenceProgramsRepository.findOneBy({
+          id: event.conferenceProgramId,
+        })
       : null;
 
-    if (!target || !event || !placement || !(await this.conferencesRepository.existsBy({
-      id: placement.conferenceId,
-      publicationStatus: PublicationStatus.PUBLISHED,
-    }))) {
+    if (
+      !target ||
+      !event ||
+      !placement ||
+      !(await this.conferencesRepository.existsBy({
+        id: placement.conferenceId,
+        publicationStatus: PublicationStatus.PUBLISHED,
+      }))
+    ) {
       throw new NotFoundException('Published media target not found');
     }
   }

@@ -50,8 +50,14 @@ export class MediaController {
     @Query('mediaTypes') mediaTypes?: string,
   ) {
     const selectedTypes = mediaTypes?.split(',').filter(Boolean);
-    if (selectedTypes?.some((type) => !Object.values(MediaType).includes(type as MediaType))) {
-      throw new BadRequestException('mediaTypes contains an unsupported media type');
+    if (
+      selectedTypes?.some(
+        (type) => !Object.values(MediaType).includes(type as MediaType),
+      )
+    ) {
+      throw new BadRequestException(
+        'mediaTypes contains an unsupported media type',
+      );
     }
     return this.mediaService.findPublished({
       page,
@@ -74,6 +80,18 @@ export class MediaController {
     @Query('targetId', ParseUUIDPipe) targetId: string,
   ): Promise<MediaEntity[]> {
     return this.mediaService.findForTarget(targetType, targetId);
+  }
+
+  @Get('files/:folder/:filename')
+  @Public()
+  async nestedFile(
+    @Param('folder') folder: string,
+    @Param('filename') filename: string,
+  ): Promise<StreamableFile> {
+    const media = await this.mediaService.publicFile(`${folder}/${filename}`);
+    return new StreamableFile(createReadStream(media.path), {
+      type: media.mimeType ?? undefined,
+    });
   }
 
   @Get(':key')

@@ -2,12 +2,26 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Status } from '../../../common/enums/status.enum';
 import { UsersEntity } from '../entity/users.entity';
 
-export interface UserRoleResponse {
-  readonly id: string;
+export class UserPermissionResponse {
+  @ApiProperty()
+  id!: string;
 
-  readonly name: string;
+  @ApiProperty()
+  name!: string;
+}
 
-  readonly description: string | null;
+export class UserRoleResponse {
+  @ApiProperty()
+  id!: string;
+
+  @ApiProperty()
+  name!: string;
+
+  @ApiPropertyOptional()
+  description!: string | null;
+
+  @ApiProperty({ type: () => [UserPermissionResponse] })
+  permissions!: UserPermissionResponse[];
 }
 
 export class UserResponse {
@@ -40,9 +54,7 @@ export class UserResponse {
   })
   reference!: string | null;
 
-  @ApiProperty({
-    isArray: true,
-  })
+  @ApiProperty({ type: () => [UserRoleResponse] })
   roles!: UserRoleResponse[];
 
   @ApiProperty()
@@ -85,53 +97,34 @@ export class UserResponse {
 export function toUserResponse(user: UsersEntity): UserResponse {
   return {
     id: user.id,
-
     firstname: user.firstname,
-
     lastname: user.lastname,
-
     username: user.username,
-
     email: user.email,
-
     emailVerifiedAt: user.emailVerifiedAt,
-
     pendingEmail: user.pendingEmail ?? null,
-
     phone: user.phone ?? null,
-
     reference: user.reference ?? null,
-
     roles: (user.roles ?? []).map((role) => ({
       id: role.id,
-
       name: role.name,
-
       description: role.description ?? null,
+      permissions: (role.permissions ?? []).map((permission) => ({
+        id: permission.id,
+        name: permission.name,
+      })),
     })),
-
     status: user.status,
-
     isLocked: user.isLocked,
-
     lockedAt: user.lockedAt ?? null,
-
     lockExpiresAt: user.lockExpiresAt ?? null,
-
     failedLoginAttempts: user.failedLoginAttempts,
-
     lastFailedLoginAt: user.lastFailedLoginAt ?? null,
-
     lastLoginAt: user.lastLoginAt ?? null,
-
     isTwoFactorEnabled: user.isTwoFactorEnabled,
-
     passwordChangedAt: user.passwordChangedAt ?? null,
-
     forcePasswordChange: user.forcePasswordChange,
-
     createdAt: user.createdAt,
-
     updatedAt: user.updatedAt,
   };
 }

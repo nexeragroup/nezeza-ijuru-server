@@ -117,7 +117,6 @@ export class ConferencesService {
   findAllConferences(): Promise<ConferencesEntity[]> {
     return this.conferencesRepository.find({
       relations: { programs: { program: true } },
-      order: { year: 'DESC' },
     });
   }
 
@@ -159,7 +158,10 @@ export class ConferencesService {
 
   async findCurrentConference(): Promise<ConferencesEntity> {
     const conference = await this.conferencesRepository.findOne({
-      where: { isCurrent: true, publicationStatus: PublicationStatus.PUBLISHED },
+      where: {
+        isCurrent: true,
+        publicationStatus: PublicationStatus.PUBLISHED,
+      },
       relations: { programs: { program: true } },
     });
     if (!conference)

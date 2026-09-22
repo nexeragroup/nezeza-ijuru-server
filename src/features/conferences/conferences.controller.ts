@@ -45,6 +45,12 @@ export class ConferencesController {
 
   @Get('all')
   @Public()
+  allConferences(): Promise<ConferencesEntity[]> {
+    return this.conferencesService.findAllConferences();
+  }
+
+  @Get('all/published')
+  @Public()
   publicConferences(): Promise<ConferencesEntity[]> {
     return this.conferencesService.findPublishedConferences();
   }

@@ -1,5 +1,11 @@
 export default () => ({
   storage: {
+    provider: process.env.STORAGE_PROVIDER ?? 'local',
+    localPath: process.env.STORAGE_LOCAL_PATH ?? './storage',
+    publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL ?? '',
+    maxFileSizeBytes: Number(
+      process.env.STORAGE_MAX_FILE_SIZE_BYTES ?? 26_214_400,
+    ),
     enabled: process.env.STORAGE_ENABLED === 'true',
     endpoint: process.env.STORAGE_ENDPOINT,
     region: process.env.STORAGE_REGION ?? 'us-east-1',

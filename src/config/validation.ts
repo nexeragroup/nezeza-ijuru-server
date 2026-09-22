@@ -421,6 +421,18 @@ export const validationSchema = Joi.object({
 
   STORAGE_ENABLED: booleanEnv().default(false),
 
+  STORAGE_PROVIDER: Joi.string().valid('local', 's3').default('local'),
+
+  STORAGE_LOCAL_PATH: Joi.string().trim().min(1).default('./storage'),
+
+  STORAGE_PUBLIC_BASE_URL: Joi.string().uri().allow('').default(''),
+
+  STORAGE_MAX_FILE_SIZE_BYTES: Joi.number()
+    .integer()
+    .min(1)
+    .max(104_857_600)
+    .default(26_214_400),
+
   STORAGE_ENDPOINT: Joi.string().uri().allow('').default(''),
 
   STORAGE_REGION: Joi.string().trim().min(1).default('us-east-1'),

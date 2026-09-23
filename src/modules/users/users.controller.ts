@@ -173,6 +173,23 @@ export class UsersController {
    * ----------------------------------------------------------------
    */
 
+  @Put(':id/verify')
+  @Roles(ROLES.DEVELOPER, ROLES.ADMIN)
+  @ApiOperation({
+    summary: 'Verify a user account',
+  })
+  async verifyUser(
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+      }),
+    )
+    id: string,
+  ): Promise<UserResponse> {
+    return toUserResponse(await this.usersService.verifyUser(id));
+  }
+
   @Put(':id/activate')
   @Roles(ROLES.DEVELOPER, ROLES.ADMIN)
   @ApiOperation({
@@ -188,6 +205,23 @@ export class UsersController {
     id: string,
   ): Promise<UserResponse> {
     return toUserResponse(await this.usersService.activateUser(id));
+  }
+
+  @Put(':id/deactivate')
+  @Roles(ROLES.DEVELOPER, ROLES.ADMIN)
+  @ApiOperation({
+    summary: 'Deactivate a user',
+  })
+  async deactivateUser(
+    @Param(
+      'id',
+      new ParseUUIDPipe({
+        version: '4',
+      }),
+    )
+    id: string,
+  ): Promise<UserResponse> {
+    return toUserResponse(await this.usersService.deactivateUser(id));
   }
 
   @Put(':id/unlock')

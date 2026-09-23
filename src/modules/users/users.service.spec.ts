@@ -26,6 +26,7 @@ function setup() {
     update: jest.fn().mockResolvedValue({}),
   };
   const manager = {
+    query: jest.fn().mockResolvedValue(undefined),
     getRepository: (entity: unknown) =>
       entity === UsersEntity
         ? repo
@@ -95,6 +96,7 @@ describe('UsersService', () => {
         username: 'yves',
         email: 'yves@example.com',
         password: 'argon2-hash',
+        status: Status.INACTIVE,
       }),
     );
     expect(repo.create.mock.calls[0][0]).not.toHaveProperty('confirm');
@@ -159,5 +161,56 @@ describe('UsersService', () => {
         }
       ).isUsableAdministrator(user),
     ).toBe(true);
+  });
+
+  it('verifies an unverified user and consumes pending verification tokens', async () => {
+    const { service, repo, tokenRepo } = setup();
+    const user = {
+      id: 'user-1',
+      emailVerifiedAt: null,
+      status: Status.INACTIVE,
+      isLocked: false,
+      forcePasswordChange: false,
+      tokenVersion: 0,
+      refreshTokenHash: 'refresh-token',
+      roles: [],
+    } as unknown as UsersEntity;
+    repo.findOne.mockResolvedValue(user);
+
+    await service.verifyUser(user.id);
+
+    expect(user.emailVerifiedAt).toEqual(expect.any(Date));
+    expect(tokenRepo.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: user.id,
+        purpose: 'EMAIL_VERIFICATION',
+        consumedAt: expect.anything(),
+      }),
+      { consumedAt: expect.any(Date) },
+    );
+    expect(repo.save).toHaveBeenCalledWith(user);
+    expect(user.status).toBe(Status.ACTIVE);
+  });
+
+  it('deactivates a user and revokes active authentication state', async () => {
+    const { service, repo } = setup();
+    const user = {
+      id: 'user-1',
+      emailVerifiedAt: new Date(),
+      status: Status.ACTIVE,
+      isLocked: false,
+      forcePasswordChange: false,
+      tokenVersion: 0,
+      refreshTokenHash: 'refresh-token',
+      roles: [],
+    } as unknown as UsersEntity;
+    repo.findOne.mockResolvedValue(user);
+
+    await service.deactivateUser(user.id);
+
+    expect(user.status).toBe(Status.INACTIVE);
+    expect(user.tokenVersion).toBe(1);
+    expect(user.refreshTokenHash).toBeNull();
+    expect(repo.save).toHaveBeenCalledWith(user);
   });
 });

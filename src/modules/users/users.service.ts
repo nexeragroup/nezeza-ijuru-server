@@ -93,7 +93,7 @@ export class UsersService {
           reference: this.normalizeReference(dto.reference),
           password: await this.passwordService.hash(dto.password),
           roles,
-          status: Status.ACTIVE,
+          status: Status.INACTIVE,
           isLocked: false,
           failedLoginAttempts: 0,
           forcePasswordChange: false,
@@ -359,6 +359,26 @@ export class UsersService {
    * ----------------------------------------------------------------
    */
 
+  verifyUser(id: string): Promise<UsersEntity> {
+    return this.mutateUser(id, async (manager, user) => {
+      if (user.emailVerifiedAt) return;
+
+      const now = new Date();
+      user.emailVerifiedAt = now;
+      user.status = Status.ACTIVE;
+      await manager.getRepository(AuthTokenEntity).update(
+        {
+          userId: user.id,
+          purpose: 'EMAIL_VERIFICATION',
+          consumedAt: IsNull(),
+        },
+        { consumedAt: now },
+      );
+
+      return { revokeSessions: true };
+    });
+  }
+
   lockUser(id: string): Promise<UsersEntity> {
     return this.mutateUser(id, async (_manager, user) => {
       user.isLocked = true;
@@ -393,6 +413,13 @@ export class UsersService {
       return {
         revokeSessions: true,
       };
+    });
+  }
+
+  deactivateUser(id: string): Promise<UsersEntity> {
+    return this.mutateUser(id, async (_manager, user) => {
+      user.status = Status.INACTIVE;
+      return { revokeSessions: true };
     });
   }
 

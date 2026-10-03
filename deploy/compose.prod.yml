@@ -1,0 +1,175 @@
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  api:
+    container_name: ${SERVER_CONTAINER_NAME}
+    image: ${SERVER_IMAGE}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ${SERVER_RUNTIME_ENV_FILE}
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: ${SERVER_CONTAINER_PORT}
+      DATABASE_MIGRATIONS: 'false'
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      seed-default-admin:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - 127.0.0.1:${SERVER_HOST_PORT}:${SERVER_CONTAINER_PORT}
+    volumes:
+      - ${DATA_ROOT}/storage:/app/storage
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    cpus: ${API_CPU_LIMIT}
+    mem_limit: ${API_MEMORY_LIMIT}
+    pids_limit: ${API_PIDS_LIMIT}
+    logging:
+      driver: local
+      options:
+        max-size: ${LOG_MAX_SIZE}
+        max-file: ${LOG_MAX_FILES}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
+
+  migrate:
+    image: ${SERVER_IMAGE}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ${SERVER_RUNTIME_ENV_FILE}
+    environment:
+      NODE_ENV: production
+      DATABASE_MIGRATIONS: 'false'
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+    command: ['node', 'scripts/run-migrations.cjs']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+    init: true
+    stop_grace_period: 30s
+    cpus: ${MIGRATION_CPU_LIMIT}
+    mem_limit: ${MIGRATION_MEMORY_LIMIT}
+    pids_limit: ${MIGRATION_PIDS_LIMIT}
+    logging:
+      driver: local
+      options:
+        max-size: ${LOG_MAX_SIZE}
+        max-file: ${LOG_MAX_FILES}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
+
+  seed-default-admin:
+    image: ${SERVER_IMAGE}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    env_file:
+      - ${SERVER_RUNTIME_ENV_FILE}
+    environment:
+      NODE_ENV: production
+      DATABASE_MIGRATIONS: 'false'
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+    command: ['node', 'dist/database/seed-default-admin.js']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+    init: true
+    stop_grace_period: 30s
+    cpus: ${MIGRATION_CPU_LIMIT}
+    mem_limit: ${MIGRATION_MEMORY_LIMIT}
+    pids_limit: ${MIGRATION_PIDS_LIMIT}
+    logging:
+      driver: local
+      options:
+        max-size: ${LOG_MAX_SIZE}
+        max-file: ${LOG_MAX_FILES}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:17-alpine
+    env_file:
+      - ${SERVER_RUNTIME_ENV_FILE}
+    volumes:
+      - ${DATA_ROOT}/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: ${POSTGRES_CPU_LIMIT}
+    mem_limit: ${POSTGRES_MEMORY_LIMIT}
+    pids_limit: ${POSTGRES_PIDS_LIMIT}
+    logging:
+      driver: local
+      options:
+        max-size: ${LOG_MAX_SIZE}
+        max-file: ${LOG_MAX_FILES}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  redis:
+    image: redis:8-alpine
+    env_file:
+      - ${SERVER_RUNTIME_ENV_FILE}
+    command:
+      [
+        'sh',
+        '-c',
+        'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"',
+      ]
+    volumes:
+      - ${DATA_ROOT}/redis:/data
+    restart: unless-stopped
+    stop_grace_period: 20s
+    cpus: ${REDIS_CPU_LIMIT}
+    mem_limit: ${REDIS_MEMORY_LIMIT}
+    pids_limit: ${REDIS_PIDS_LIMIT}
+    logging:
+      driver: local
+      options:
+        max-size: ${LOG_MAX_SIZE}
+        max-file: ${LOG_MAX_FILES}
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+networks:
+  backend:

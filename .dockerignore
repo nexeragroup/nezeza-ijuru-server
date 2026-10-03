@@ -1,0 +1,10 @@
+.env
+.env.*
+.git
+.github
+coverage
+dist
+node_modules
+storage
+npm-debug.log*
+pnpm-debug.log*

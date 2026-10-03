@@ -1,0 +1,21 @@
+export default () => ({
+  storage: {
+    provider: process.env.STORAGE_PROVIDER ?? 'local',
+    localPath: process.env.STORAGE_LOCAL_PATH ?? './storage',
+    publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL ?? '',
+    maxFileSizeBytes: Number(
+      process.env.STORAGE_MAX_FILE_SIZE_BYTES ?? 26_214_400,
+    ),
+    enabled: process.env.STORAGE_ENABLED === 'true',
+    endpoint: process.env.STORAGE_ENDPOINT,
+    region: process.env.STORAGE_REGION ?? 'us-east-1',
+    bucket: process.env.STORAGE_BUCKET,
+    accessKeyId: process.env.STORAGE_ACCESS_KEY_ID,
+    secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY,
+    forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE === 'true',
+    tls: process.env.STORAGE_TLS !== 'false',
+    presignedExpirySeconds: Number(
+      process.env.STORAGE_PRESIGNED_EXPIRY_SECONDS ?? 900,
+    ),
+  },
+});

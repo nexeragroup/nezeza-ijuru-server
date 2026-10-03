@@ -1,0 +1,10 @@
+export enum InvitationStatus {
+  DRAFT = 'DRAFT',
+  PENDING = 'PENDING',
+  SENT = 'SENT',
+  DELIVERED = 'DELIVERED',
+  ACCEPTED = 'ACCEPTED',
+  DECLINED = 'DECLINED',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
+}

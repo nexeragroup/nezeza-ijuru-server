@@ -1,0 +1,8 @@
+export enum InvitationAttendanceStatus {
+  NOT_RECORDED = 'NOT_RECORDED',
+  EXPECTED = 'EXPECTED',
+  ARRIVED = 'ARRIVED',
+  ATTENDED = 'ATTENDED',
+  ABSENT = 'ABSENT',
+  CANCELLED = 'CANCELLED',
+}

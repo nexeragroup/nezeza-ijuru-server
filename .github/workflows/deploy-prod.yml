@@ -1,0 +1,62 @@
+name: Deploy server production
+
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DEPLOY_ROOT: /home/yves/nezeza-ijuru/prod
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Prepare deployment folders
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "install -d -m 0755 '$DEPLOY_ROOT/server' '$DEPLOY_ROOT/logs' '$DEPLOY_ROOT/data/storage' '$DEPLOY_ROOT/data/postgres' '$DEPLOY_ROOT/data/redis' '/home/yves/nezeza-ijuru/backups' && (docker network inspect nezeza-ijuru-prod-network >/dev/null 2>&1 || docker network create nezeza-ijuru-prod-network) && test -s '$DEPLOY_ROOT/server/.env.prod'"
+
+      - name: Synchronize Server
+        run: |
+          rsync -az --delete \
+            --exclude='/.env' \
+            --exclude='/.env.*' \
+            --exclude='/.git/' \
+            --exclude='/coverage/' \
+            --exclude='/dist/' \
+            --exclude='/node_modules/' \
+            --exclude='/storage/' \
+            -e "ssh -p $DEPLOY_PORT" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_ROOT/server/"
+
+      - name: Build and run Server
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd '$DEPLOY_ROOT/server' && docker compose --env-file deploy/.env.prod -f deploy/compose.prod.yml up -d --build --remove-orphans"
+
+      - name: Verify Server readiness
+        run: |
+          ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
+            "for attempt in \$(seq 1 24); do curl --fail --silent --show-error --resolve api.nezezaijuru.org:443:127.0.0.1 https://api.nezezaijuru.org/api/v1/health/ready && exit 0; sleep 5; done; docker logs --tail=150 nezeza-ijuru-server-prod; exit 1"

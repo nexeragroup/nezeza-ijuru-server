@@ -36,7 +36,7 @@ jobs:
       - name: Prepare deployment folders
         run: |
           ssh -p "$DEPLOY_PORT" "$DEPLOY_USER@$DEPLOY_HOST" \
-            "install -d -m 0755 '$DEPLOY_ROOT/server' '$DEPLOY_ROOT/logs' '$DEPLOY_ROOT/data/storage' '$DEPLOY_ROOT/data/postgres' '$DEPLOY_ROOT/data/redis' '/home/yves/nezeza-ijuru/backups' && (docker network inspect nezeza-ijuru-prod-network >/dev/null 2>&1 || docker network create nezeza-ijuru-prod-network) && test -s '$DEPLOY_ROOT/server/.env.prod'"
+            "mkdir -p '$DEPLOY_ROOT/server' '$DEPLOY_ROOT/logs' '$DEPLOY_ROOT/data/storage' '$DEPLOY_ROOT/data/postgres' '$DEPLOY_ROOT/data/redis' '/home/yves/nezeza-ijuru/backups' && (docker network inspect nezeza-ijuru-prod-network >/dev/null 2>&1 || docker network create nezeza-ijuru-prod-network) && test -s '$DEPLOY_ROOT/server/.env.prod'"
 
       - name: Synchronize Server
         run: |

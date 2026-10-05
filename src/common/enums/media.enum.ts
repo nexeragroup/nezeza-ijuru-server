@@ -9,6 +9,7 @@ export enum MediaType {
 
 export enum MediaTargetType {
   CONFERENCE = 'CONFERENCE',
+  PROGRAM = 'PROGRAM',
   CONFERENCE_PROGRAM = 'CONFERENCE_PROGRAM',
   EVENT = 'EVENT',
   SESSION = 'SESSION',

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository, UpdateResult } from 'typeorm';
 import {
   normalizePagination,
   toPaginatedResponse,
@@ -15,6 +15,7 @@ import { ConferenceProgramsEntity } from '../conferences/entity/conference-progr
 import { ConferencesEntity } from '../conferences/entity/conferences.entity';
 import { EventsEntity } from '../events/entity/events.entity';
 import { SessionsEntity } from '../sessions/entity/sessions.entity';
+import { ProgramsEntity } from '../programs/entity/programs.entity';
 import {
   MediaMetadataDto,
   NewExternalMediaDto,
@@ -39,6 +40,8 @@ export class MediaService {
     private readonly mediaRepository: Repository<MediaEntity>,
     @InjectRepository(ConferencesEntity)
     private readonly conferencesRepository: Repository<ConferencesEntity>,
+    @InjectRepository(ProgramsEntity)
+    private readonly programsRepository: Repository<ProgramsEntity>,
     @InjectRepository(ConferenceProgramsEntity)
     private readonly conferenceProgramsRepository: Repository<ConferenceProgramsEntity>,
     @InjectRepository(EventsEntity)
@@ -58,7 +61,7 @@ export class MediaService {
     targetType: MediaTargetType,
     targetId: string,
   ): Promise<MediaEntity[]> {
-    await this.assertPublishedTargetExists(targetType, targetId);
+    await this.assertTargetExists(targetType, targetId);
     return this.mediaRepository.find({
       where: { targetType, targetId },
       order: { isFeatured: 'DESC', createdAt: 'DESC' },
@@ -67,19 +70,24 @@ export class MediaService {
 
   async createExternal(dto: NewExternalMediaDto): Promise<MediaEntity> {
     await this.assertTargetExists(dto.targetType, dto.targetId);
-    return this.mediaRepository.save(
-      this.mediaRepository.create({
-        ...dto,
-        sourceType: MediaSourceType.EXTERNAL,
-        caption: dto.caption ?? null,
-        altText: dto.altText ?? null,
-        storageKey: null,
-        mimeType: null,
-        fileSize: null,
-        durationSeconds: dto.durationSeconds ?? null,
-        isFeatured: dto.isFeatured ?? false,
-      }),
-    );
+    return this.mediaRepository.manager.transaction(async (manager) => {
+      const repository = manager.getRepository(MediaEntity);
+      const media = await repository.save(
+        repository.create({
+          ...dto,
+          sourceType: MediaSourceType.EXTERNAL,
+          caption: dto.caption ?? null,
+          altText: dto.altText ?? null,
+          storageKey: null,
+          mimeType: null,
+          fileSize: null,
+          durationSeconds: dto.durationSeconds ?? null,
+          isFeatured: dto.isFeatured ?? false,
+        }),
+      );
+      await this.syncFeaturedTargetImage(manager, media);
+      return media;
+    });
   }
 
   async createBulkExternal(
@@ -120,14 +128,21 @@ export class MediaService {
       .leftJoin(
         ConferenceProgramsEntity,
         'placement',
-        '(media.targetType = :programType AND placement.id = media.targetId) OR placement.id = event.conferenceProgramId',
+        '(media.targetType = :conferenceProgramType AND placement.id = media.targetId) OR placement.id = event.conferenceProgramId',
       )
-      .innerJoin(
+      .leftJoin(
         ConferencesEntity,
         'conference',
         '(media.targetType = :conferenceType AND conference.id = media.targetId) OR conference.id = placement.conferenceId',
       )
-      .where('conference.publicationStatus = :published')
+      .leftJoin(
+        ProgramsEntity,
+        'program',
+        'media.targetType = :programType AND program.id = media.targetId',
+      )
+      .where(
+        '(media.targetType = :programType AND program.publicationStatus = :published) OR (media.targetType != :programType AND conference.publicationStatus = :published)',
+      )
       .andWhere(
         '(media.targetType NOT IN (:...eventTargets) OR event.publicationStatus = :published)',
       )
@@ -137,7 +152,8 @@ export class MediaService {
       .setParameters({
         sessionType: MediaTargetType.SESSION,
         eventType: MediaTargetType.EVENT,
-        programType: MediaTargetType.CONFERENCE_PROGRAM,
+        programType: MediaTargetType.PROGRAM,
+        conferenceProgramType: MediaTargetType.CONFERENCE_PROGRAM,
         conferenceType: MediaTargetType.CONFERENCE,
         eventTargets: [MediaTargetType.EVENT, MediaTargetType.SESSION],
         published: PublicationStatus.PUBLISHED,
@@ -210,20 +226,25 @@ export class MediaService {
     }
     const storageKey = stored.storageKey;
     try {
-      return await this.mediaRepository.save(
-        this.mediaRepository.create({
-          ...dto,
-          sourceType: MediaSourceType.UPLOAD,
-          url: `${this.publicBaseUrl}/${storageKey}`,
-          storageKey,
-          mimeType: stored.mimeType,
-          fileSize: String(stored.fileSize),
-          caption: dto.caption ?? null,
-          altText: dto.altText ?? null,
-          durationSeconds: dto.durationSeconds ?? null,
-          isFeatured: dto.isFeatured ?? false,
-        }),
-      );
+      return await this.mediaRepository.manager.transaction(async (manager) => {
+        const repository = manager.getRepository(MediaEntity);
+        const media = await repository.save(
+          repository.create({
+            ...dto,
+            sourceType: MediaSourceType.UPLOAD,
+            url: `${this.publicBaseUrl}/${storageKey}`,
+            storageKey,
+            mimeType: stored.mimeType,
+            fileSize: String(stored.fileSize),
+            caption: dto.caption ?? null,
+            altText: dto.altText ?? null,
+            durationSeconds: dto.durationSeconds ?? null,
+            isFeatured: dto.isFeatured ?? false,
+          }),
+        );
+        await this.syncFeaturedTargetImage(manager, media);
+        return media;
+      });
     } catch (error) {
       await this.storage.removeByKey(storageKey);
       throw error;
@@ -240,6 +261,18 @@ export class MediaService {
     }
     const media = await this.mediaRepository.findOneBy({ storageKey: key });
     if (!media) throw new NotFoundException();
+    if (media.targetType === MediaTargetType.PROGRAM) {
+      const program = await this.programsRepository.findOneBy({
+        id: media.targetId,
+        publicationStatus: PublicationStatus.PUBLISHED,
+      });
+      if (!program) throw new NotFoundException();
+      return {
+        path: this.storage.pathForKey(key),
+        mediaType: media.mediaType,
+        mimeType: media.mimeType,
+      };
+    }
     let conferenceId: string;
     if (media.targetType === MediaTargetType.CONFERENCE)
       conferenceId = media.targetId;
@@ -285,22 +318,60 @@ export class MediaService {
   }
 
   async update(id: string, dto: UpdateMediaDto): Promise<MediaEntity> {
-    const media = await this.findOne(id);
+    const existing = await this.findOne(id);
     if (dto.targetType || dto.targetId) {
       await this.assertTargetExists(
-        dto.targetType ?? media.targetType,
-        dto.targetId ?? media.targetId,
+        dto.targetType ?? existing.targetType,
+        dto.targetId ?? existing.targetId,
       );
     }
-    Object.assign(media, dto);
-    return this.mediaRepository.save(media);
+    return this.mediaRepository.manager.transaction(async (manager) => {
+      const repository = manager.getRepository(MediaEntity);
+      const media = await this.findOne(id, repository);
+      const originalCoverImage = this.isCoverImage(media);
+      const originalTargetType = media.targetType;
+      const originalTargetId = media.targetId;
+      Object.assign(media, dto);
+      const saved = await repository.save(media);
+
+      if (
+        originalCoverImage &&
+        (!this.isCoverImage(saved) ||
+          saved.targetType !== originalTargetType ||
+          saved.targetId !== originalTargetId ||
+          !saved.isFeatured)
+      ) {
+        await this.clearFeaturedTargetImage(
+          manager,
+          originalTargetType,
+          originalTargetId,
+          saved.id,
+        );
+      }
+      await this.syncFeaturedTargetImage(manager, saved);
+      return saved;
+    });
   }
 
   async remove(id: string): Promise<void> {
-    const media = await this.findOne(id);
-    await this.mediaRepository.remove(media);
-    if (media.storageKey) {
-      await this.storage.removeByKey(media.storageKey);
+    const storageKey = await this.mediaRepository.manager.transaction(
+      async (manager) => {
+        const repository = manager.getRepository(MediaEntity);
+        const media = await this.findOne(id, repository);
+        if (this.isCoverImage(media)) {
+          await this.clearFeaturedTargetImage(
+            manager,
+            media.targetType,
+            media.targetId,
+            media.id,
+          );
+        }
+        await repository.remove(media);
+        return media.storageKey;
+      },
+    );
+    if (storageKey) {
+      await this.storage.removeByKey(storageKey);
     }
   }
 
@@ -313,8 +384,11 @@ export class MediaService {
     return FileType.OTHER;
   }
 
-  private async findOne(id: string): Promise<MediaEntity> {
-    const media = await this.mediaRepository.findOneBy({ id });
+  private async findOne(
+    id: string,
+    repository: Repository<MediaEntity> = this.mediaRepository,
+  ): Promise<MediaEntity> {
+    const media = await repository.findOneBy({ id });
     if (!media) throw new NotFoundException('Media not found');
     return media;
   }
@@ -325,6 +399,7 @@ export class MediaService {
   ): Promise<void> {
     const repository = {
       [MediaTargetType.CONFERENCE]: this.conferencesRepository,
+      [MediaTargetType.PROGRAM]: this.programsRepository,
       [MediaTargetType.CONFERENCE_PROGRAM]: this.conferenceProgramsRepository,
       [MediaTargetType.EVENT]: this.eventsRepository,
       [MediaTargetType.SESSION]: this.sessionsRepository,
@@ -334,74 +409,64 @@ export class MediaService {
     }
   }
 
-  private async assertPublishedTargetExists(
-    type: MediaTargetType,
-    id: string,
+  private isCoverImage(media: MediaEntity): boolean {
+    return (
+      (media.targetType === MediaTargetType.CONFERENCE ||
+        media.targetType === MediaTargetType.PROGRAM) &&
+      media.mediaType === MediaType.IMAGE
+    );
+  }
+
+  private async syncFeaturedTargetImage(
+    manager: EntityManager,
+    media: MediaEntity,
   ): Promise<void> {
-    if (type === MediaTargetType.CONFERENCE) {
-      if (
-        !(await this.conferencesRepository.existsBy({
-          id,
-          publicationStatus: PublicationStatus.PUBLISHED,
-        }))
-      ) {
-        throw new NotFoundException('Published conference not found');
-      }
+    if (!this.isCoverImage(media)) return;
+    if (!media.isFeatured) {
+      await this.clearFeaturedTargetImage(
+        manager,
+        media.targetType,
+        media.targetId,
+        media.id,
+      );
       return;
     }
 
-    if (type === MediaTargetType.CONFERENCE_PROGRAM) {
-      const placement = await this.conferenceProgramsRepository.findOneBy({
-        id,
-      });
-      if (
-        !placement ||
-        !(await this.conferencesRepository.existsBy({
-          id: placement.conferenceId,
-          publicationStatus: PublicationStatus.PUBLISHED,
-        }))
-      ) {
-        throw new NotFoundException('Published conference program not found');
-      }
-      return;
+    const mediaRepository = manager.getRepository(MediaEntity);
+    await mediaRepository.update(
+      {
+        targetType: media.targetType,
+        targetId: media.targetId,
+        mediaType: MediaType.IMAGE,
+      },
+      { isFeatured: false },
+    );
+    await mediaRepository.update({ id: media.id }, { isFeatured: true });
+    if (media.targetType === MediaTargetType.CONFERENCE) {
+      await manager.getRepository(ConferencesEntity).update(
+        { id: media.targetId },
+        { featuredMediaId: media.id },
+      );
+    } else {
+      await manager.getRepository(ProgramsEntity).update(
+        { id: media.targetId },
+        { featuredMediaId: media.id },
+      );
     }
+  }
 
-    const target =
-      type === MediaTargetType.EVENT
-        ? await this.eventsRepository.findOneBy({
-            id,
-            publicationStatus: PublicationStatus.PUBLISHED,
-          })
-        : await this.sessionsRepository.findOneBy({
-            id,
-            publicationStatus: PublicationStatus.PUBLISHED,
-          });
-    const eventId =
-      type === MediaTargetType.EVENT
-        ? id
-        : (target as SessionsEntity | null)?.eventId;
-    const event = eventId
-      ? await this.eventsRepository.findOneBy({
-          id: eventId,
-          publicationStatus: PublicationStatus.PUBLISHED,
-        })
-      : null;
-    const placement = event
-      ? await this.conferenceProgramsRepository.findOneBy({
-          id: event.conferenceProgramId,
-        })
-      : null;
-
-    if (
-      !target ||
-      !event ||
-      !placement ||
-      !(await this.conferencesRepository.existsBy({
-        id: placement.conferenceId,
-        publicationStatus: PublicationStatus.PUBLISHED,
-      }))
-    ) {
-      throw new NotFoundException('Published media target not found');
-    }
+  private clearFeaturedTargetImage(
+    manager: EntityManager,
+    targetType: MediaTargetType,
+    targetId: string,
+    mediaId: string,
+  ): Promise<UpdateResult> {
+    const repository = manager.getRepository(
+      targetType === MediaTargetType.PROGRAM ? ProgramsEntity : ConferencesEntity,
+    );
+    return repository.update(
+      { id: targetId, featuredMediaId: mediaId },
+      { featuredMediaId: null },
+    );
   }
 }

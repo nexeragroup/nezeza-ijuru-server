@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Not, Repository } from 'typeorm';
+import { EntityManager, In, Not, Repository } from 'typeorm';
 import { ProgramsEntity } from '../programs/entity/programs.entity';
 import { PublicationStatus } from '../../common/enums/publication-status.enum';
 import {
@@ -17,7 +17,7 @@ import { ConferenceProgramsEntity } from './entity/conference-programs.entity';
 import { ConferencesEntity } from './entity/conferences.entity';
 import { MediaEntity } from '../media/entity/media.entity';
 import { EventsEntity } from '../events/entity/events.entity';
-import { MediaTargetType } from '../../common/enums/media.enum';
+import { MediaTargetType, MediaType } from '../../common/enums/media.enum';
 import { BULK_CREATE_LIMIT } from '../../common/constants/bulk.constant';
 
 export interface PublishedConferenceProgramDetails {
@@ -40,6 +40,11 @@ export class ConferencesService {
   ) {}
 
   async createConference(dto: NewConference): Promise<ConferencesEntity> {
+    if (dto.featuredMediaId) {
+      throw new BadRequestException(
+        'Add a conference image after creating the conference',
+      );
+    }
     this.validateDates(dto.startDate, dto.endDate);
     const slug = this.toSlug(dto.slug ?? dto.title);
     await this.ensureUnique(dto.year, slug);
@@ -80,7 +85,7 @@ export class ConferencesService {
         description: this.cleanOptionalText(dto.description),
         startDate: dto.startDate ?? null,
         endDate: dto.endDate ?? null,
-        featuredMediaId: dto.featuredMediaId ?? null,
+        featuredMediaId: null,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
       });
       const savedConference = await repository.save(conference);
@@ -114,10 +119,11 @@ export class ConferencesService {
     return conferences;
   }
 
-  findAllConferences(): Promise<ConferencesEntity[]> {
-    return this.conferencesRepository.find({
+  async findAllConferences(): Promise<ConferencesEntity[]> {
+    const conferences = await this.conferencesRepository.find({
       relations: { programs: { program: true } },
     });
+    return this.attachFeaturedMedia(conferences);
   }
 
   async findPublishedConferences(): Promise<ConferencesEntity[]> {
@@ -125,7 +131,7 @@ export class ConferencesService {
       where: { publicationStatus: PublicationStatus.PUBLISHED },
       order: { year: 'DESC' },
     });
-    return conferences;
+    return this.attachFeaturedMedia(conferences);
   }
 
   async findPublishedConferenceBySlug(
@@ -153,6 +159,7 @@ export class ConferencesService {
       MediaTargetType.CONFERENCE,
       conference.id,
     );
+    await this.attachFeaturedMedia([conference]);
     return conference;
   }
 
@@ -166,6 +173,7 @@ export class ConferencesService {
     });
     if (!conference)
       throw new NotFoundException('Current conference not found');
+    await this.attachFeaturedMedia([conference]);
     return conference;
   }
 
@@ -182,6 +190,7 @@ export class ConferencesService {
     });
     if (!conference)
       throw new NotFoundException(`Conference with ID ${id} not found`);
+    await this.attachFeaturedMedia([conference]);
     return conference;
   }
 
@@ -205,6 +214,7 @@ export class ConferencesService {
       MediaTargetType.CONFERENCE,
       conference.id,
     );
+    await this.attachFeaturedMedia([conference]);
     return conference;
   }
 
@@ -261,6 +271,7 @@ export class ConferencesService {
       where: mediaTargets,
       order: { isFeatured: 'DESC', createdAt: 'DESC' },
     });
+    await this.attachFeaturedMedia([conference]);
     return { conference, conferenceProgram, media };
   }
 
@@ -278,6 +289,24 @@ export class ConferencesService {
 
     await this.conferencesRepository.manager.transaction(async (manager) => {
       const repository = manager.getRepository(ConferencesEntity);
+      const mediaRepository = manager.getRepository(MediaEntity);
+      if (dto.featuredMediaId) {
+        const featuredMedia = await this.findFeaturedConferenceImage(
+          manager,
+          id,
+          dto.featuredMediaId,
+        );
+        await mediaRepository.update(
+          {
+            targetType: MediaTargetType.CONFERENCE,
+            targetId: id,
+            mediaType: MediaType.IMAGE,
+          },
+          { isFeatured: false },
+        );
+        featuredMedia.isFeatured = true;
+        await mediaRepository.save(featuredMedia);
+      }
       if (dto.isCurrent) {
         await repository.update({ isCurrent: true }, { isCurrent: false });
       }
@@ -374,6 +403,56 @@ export class ConferencesService {
       where: { targetType, targetId },
       order: { isFeatured: 'DESC', createdAt: 'DESC' },
     });
+  }
+
+  private async attachFeaturedMedia(
+    conferences: ConferencesEntity[],
+  ): Promise<ConferencesEntity[]> {
+    const featuredMediaIds = [
+      ...new Set(
+        conferences
+          .map((conference) => conference.featuredMediaId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (featuredMediaIds.length === 0) {
+      conferences.forEach((conference) => (conference.featuredMedia = null));
+      return conferences;
+    }
+
+    const media = await this.mediaRepository.findBy({
+      id: In(featuredMediaIds),
+      targetType: MediaTargetType.CONFERENCE,
+      mediaType: MediaType.IMAGE,
+    });
+    const mediaById = new Map(media.map((item) => [item.id, item]));
+    conferences.forEach((conference) => {
+      const featuredMedia = conference.featuredMediaId
+        ? mediaById.get(conference.featuredMediaId) ?? null
+        : null;
+      conference.featuredMedia =
+        featuredMedia?.targetId === conference.id ? featuredMedia : null;
+    });
+    return conferences;
+  }
+
+  private async findFeaturedConferenceImage(
+    manager: EntityManager,
+    conferenceId: string,
+    mediaId: string,
+  ): Promise<MediaEntity> {
+    const media = await manager.getRepository(MediaEntity).findOneBy({
+      id: mediaId,
+      targetType: MediaTargetType.CONFERENCE,
+      targetId: conferenceId,
+      mediaType: MediaType.IMAGE,
+    });
+    if (!media) {
+      throw new BadRequestException(
+        'The conference image must be an image attached to this conference',
+      );
+    }
+    return media;
   }
 
   private async ensureUnique(

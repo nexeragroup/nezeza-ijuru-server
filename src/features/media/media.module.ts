@@ -6,6 +6,7 @@ import { ConferenceProgramsEntity } from '../conferences/entity/conference-progr
 import { ConferencesEntity } from '../conferences/entity/conferences.entity';
 import { EventsEntity } from '../events/entity/events.entity';
 import { SessionsEntity } from '../sessions/entity/sessions.entity';
+import { ProgramsEntity } from '../programs/entity/programs.entity';
 import { MediaEntity } from './entity/media.entity';
 import { LivestreamService } from './livestream.service';
 import { YoutubeService } from './youtube.service';
@@ -20,6 +21,7 @@ import { StorageModule } from '../../modules/storage/storage.module';
       ConferenceProgramsEntity,
       EventsEntity,
       SessionsEntity,
+      ProgramsEntity,
     ]),
   ],
   exports: [LivestreamService, MediaService],

@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { PublicationStatus } from '../../../common/enums/publication-status.enum';
 import { ConferenceProgramsEntity } from '../../conferences/entity/conference-programs.entity';
+import { MediaEntity } from '../../media/entity/media.entity';
 
 @Entity({ name: 'programs', schema: 'public' })
 export class ProgramsEntity {
@@ -42,4 +43,6 @@ export class ProgramsEntity {
     (conferenceProgram) => conferenceProgram.program,
   )
   conferences!: ConferenceProgramsEntity[];
+  /** Resolved from featuredMediaId for API responses; media is polymorphic. */
+  featuredMedia?: MediaEntity | null;
 }

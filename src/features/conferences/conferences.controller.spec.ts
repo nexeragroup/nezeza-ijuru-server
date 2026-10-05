@@ -50,9 +50,12 @@ describe('ConferencesController', () => {
         ({ methodName }) =>
           Reflect.getMetadata(IS_PUBLIC_KEY, prototype[methodName]) === true,
       ),
-    ).toHaveLength(getRoutes.length - 1);
+    ).toHaveLength(getRoutes.length - 2);
     expect(
       Reflect.getMetadata(PERMISSIONS_KEY, prototype.conferenceByID),
+    ).toHaveLength(1);
+    expect(
+      Reflect.getMetadata(PERMISSIONS_KEY, prototype.allConferences),
     ).toHaveLength(1);
     expect(new Set(getRoutes.map(({ path }) => path)).size).toBe(
       getRoutes.length,

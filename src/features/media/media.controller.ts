@@ -73,7 +73,7 @@ export class MediaController {
   }
 
   @Get()
-  @Public()
+  @Permissions(PERMISSIONS.MEDIA_READ)
   list(
     @Query('targetType', new ParseEnumPipe(MediaTargetType))
     targetType: MediaTargetType,

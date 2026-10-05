@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { MediaController } from './media.controller';
 import { MediaService } from './media.service';
 import { LivestreamService } from './livestream.service';
+import { PERMISSIONS } from '../../common/constants/permission.constants';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { PERMISSIONS_KEY } from '../../common/decorators/permissions.decorator';
 
@@ -26,7 +27,7 @@ describe('MediaController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('keeps every GET public and requires permissions for writes', () => {
+  it('keeps public media delivery separate from protected management reads and writes', () => {
     const prototype = MediaController.prototype as unknown as Record<
       string,
       object
@@ -48,10 +49,18 @@ describe('MediaController', () => {
 
     expect(getRoutes).not.toHaveLength(0);
     expect(
-      getRoutes.every(
-        ({ methodName }) =>
-          Reflect.getMetadata(IS_PUBLIC_KEY, prototype[methodName]) === true,
-      ),
+      Reflect.getMetadata(IS_PUBLIC_KEY, prototype.list),
+    ).toBeUndefined();
+    expect(
+      Reflect.getMetadata(PERMISSIONS_KEY, prototype.list),
+    ).toContain(PERMISSIONS.MEDIA_READ);
+    expect(
+      getRoutes
+        .filter(({ methodName }) => methodName !== 'list')
+        .every(
+          ({ methodName }) =>
+            Reflect.getMetadata(IS_PUBLIC_KEY, prototype[methodName]) === true,
+        ),
     ).toBe(true);
     expect(new Set(getRoutes.map(({ path }) => path)).size).toBe(
       getRoutes.length,

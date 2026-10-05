@@ -2,6 +2,7 @@ import { EventsEntity } from '../../events/entity/events.entity';
 import { ConferenceProgramsEntity } from '../../conferences/entity/conference-programs.entity';
 import { ConferencesEntity } from '../../conferences/entity/conferences.entity';
 import { ProgramsEntity } from '../entity/programs.entity';
+import { MediaEntity } from '../../media/entity/media.entity';
 
 export class ProgramResponseDto {
   id!: string;
@@ -10,6 +11,7 @@ export class ProgramResponseDto {
   summary!: string | null;
   description!: string | null;
   featuredMediaId!: string | null;
+  featuredMedia!: MediaEntity | null;
   publicationStatus!: string;
   publishedAt!: Date | null;
   createdAt!: Date;
@@ -52,6 +54,7 @@ export class ProgramResponseDto {
       summary: program.summary,
       description: program.description,
       featuredMediaId: program.featuredMediaId,
+      featuredMedia: program.featuredMedia ?? null,
       publicationStatus: program.publicationStatus,
       publishedAt: program.publishedAt,
       createdAt: program.createdAt,

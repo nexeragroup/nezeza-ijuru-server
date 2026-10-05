@@ -1,6 +1,7 @@
 import {
   Column,
   CreateDateColumn,
+  DeleteDateColumn,
   Entity,
   OneToMany,
   PrimaryGeneratedColumn,
@@ -49,11 +50,18 @@ export class ConferencesEntity {
   createdAt!: Date | null;
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt!: Date | null;
+  @DeleteDateColumn({ type: 'timestamptz' })
+  deletedAt!: Date | null;
 
   @OneToMany(
     () => ConferenceProgramsEntity,
     (conferenceProgram) => conferenceProgram.conference,
   )
   programs!: ConferenceProgramsEntity[];
+  /**
+   * Resolved from featuredMediaId for API responses. This is intentionally not
+   * a database relation: media is polymorphic and owns its target reference.
+   */
+  featuredMedia?: MediaEntity | null;
   media?: MediaEntity[];
 }

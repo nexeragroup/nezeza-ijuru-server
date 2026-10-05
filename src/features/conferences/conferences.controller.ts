@@ -44,7 +44,7 @@ export class ConferencesController {
   }
 
   @Get('all')
-  @Public()
+  @Permissions(PERMISSIONS.CONFERENCES_READ)
   allConferences(): Promise<ConferencesEntity[]> {
     return this.conferencesService.findAllConferences();
   }

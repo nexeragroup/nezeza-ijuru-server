@@ -74,11 +74,10 @@ export class UpdateEntity {
   actionUrl!: string | null;
   @VersionColumn()
   version!: number;
-  // Authentication uses numeric user IDs; inherited legacy actor columns are UUIDs.
-  @Column({ type: 'integer', nullable: true })
-  createdByUserId!: number | null;
-  @Column({ type: 'integer', nullable: true })
-  updatedByUserId!: number | null;
+  @Column({ type: 'uuid', nullable: true })
+  createdByUserId!: string | null;
+  @Column({ type: 'uuid', nullable: true })
+  updatedByUserId!: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

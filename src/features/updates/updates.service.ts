@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import { AuthenticatedUser } from '../../common/types/auth-request.interface';
 import { PublicationStatus } from '../../common/enums/publication-status.enum';
 import { ConferencesEntity } from '../conferences/entity/conferences.entity';
@@ -208,12 +209,11 @@ export class UpdatesService {
     validateUpdate(item);
   }
 
-  private authenticatedUserId(user: AuthenticatedUser): number {
-    const userId = Number(user.sub);
-    if (!Number.isSafeInteger(userId) || userId <= 0) {
+  private authenticatedUserId(user: AuthenticatedUser): string {
+    if (!isUUID(user.sub, '4')) {
       throw new UnauthorizedException('Invalid authenticated user identifier');
     }
-    return userId;
+    return user.sub;
   }
 
   async create(dto: CreateUpdateDto, user: AuthenticatedUser) {

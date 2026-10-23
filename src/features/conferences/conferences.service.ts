@@ -45,7 +45,7 @@ export class ConferencesService {
         'Add a conference image after creating the conference',
       );
     }
-    this.validateDates(dto.startDate, dto.endDate);
+    this.validateRequiredConferenceDates(dto.startDate, dto.endDate);
     const slug = this.toSlug(dto.slug ?? dto.title);
     await this.ensureUnique(dto.year, slug);
 
@@ -97,6 +97,11 @@ export class ConferencesService {
             assignment.conferenceSummary,
           ),
           isFeatured: assignment.isFeatured ?? false,
+          startDate: this.validateProgramDates(
+            assignment.startDate,
+            assignment.endDate,
+          ),
+          endDate: assignment.endDate ?? null,
         }),
       );
       await conferenceProgramRepository.save(relations);
@@ -348,9 +353,19 @@ export class ConferencesService {
     const relation =
       existing ??
       this.conferenceProgramsRepository.create({ conferenceId, programId });
+    const hasProgramDateUpdate =
+      dto.startDate !== undefined || dto.endDate !== undefined;
+    const startDate = dto.startDate ?? relation.startDate ?? undefined;
+    const endDate = dto.endDate ?? relation.endDate ?? undefined;
     Object.assign(relation, {
       conferenceSummary: this.cleanOptionalText(dto.conferenceSummary),
       isFeatured: dto.isFeatured ?? relation.isFeatured ?? false,
+      ...(hasProgramDateUpdate
+        ? {
+            startDate: this.validateProgramDates(startDate, endDate),
+            endDate: endDate ?? null,
+          }
+        : {}),
     });
     await this.conferenceProgramsRepository.save(relation);
     return this.findConferenceByID(conferenceId);
@@ -482,6 +497,36 @@ export class ConferencesService {
         'Conference end date must be on or after start date',
       );
     }
+  }
+
+  private validateRequiredConferenceDates(
+    startDate?: string,
+    endDate?: string,
+  ): void {
+    if (!startDate || !endDate) {
+      throw new BadRequestException(
+        'Conference start and end dates are required',
+      );
+    }
+    this.validateDates(startDate, endDate);
+  }
+
+  private validateProgramDates(
+    startDate?: string,
+    endDate?: string,
+  ): string | null {
+    if (!startDate && !endDate) return null;
+    if (!startDate || !endDate) {
+      throw new BadRequestException(
+        'Program start and end dates must be provided together',
+      );
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+      throw new BadRequestException(
+        'Program end date must be on or after start date',
+      );
+    }
+    return startDate;
   }
 
   private toSlug(value: string): string {

@@ -23,6 +23,8 @@ export class ProgramResponseDto {
     programId: string;
     conferenceSummary: string | null;
     isFeatured: boolean;
+    startDate: string | null;
+    endDate: string | null;
     createdAt: Date;
     conference?: {
       id: string;
@@ -75,6 +77,8 @@ export class ProgramResponseDto {
       programId: conferenceProgram.programId,
       conferenceSummary: conferenceProgram.conferenceSummary,
       isFeatured: conferenceProgram.isFeatured,
+      startDate: conferenceProgram.startDate,
+      endDate: conferenceProgram.endDate,
       createdAt: conferenceProgram.createdAt,
       conference: conferenceProgram.conference
         ? ProgramResponseDto.mapConference(conferenceProgram.conference)

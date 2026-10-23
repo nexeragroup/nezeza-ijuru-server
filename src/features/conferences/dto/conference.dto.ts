@@ -27,6 +27,14 @@ export class ConferenceProgramDto {
   @IsOptional()
   @IsBoolean()
   isFeatured?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 }
 
 export class NewConference {
@@ -58,13 +66,11 @@ export class NewConference {
   @IsString()
   description?: string;
 
-  @IsOptional()
   @IsDateString()
-  startDate?: string;
+  startDate!: string;
 
-  @IsOptional()
   @IsDateString()
-  endDate?: string;
+  endDate!: string;
 
   @IsOptional()
   @IsBoolean()

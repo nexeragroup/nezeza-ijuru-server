@@ -21,6 +21,10 @@ export class ConferenceProgramsEntity {
   conferenceSummary!: string | null;
   @Column({ default: false })
   isFeatured!: boolean;
+  @Column({ type: 'date', nullable: true })
+  startDate!: string | null;
+  @Column({ type: 'date', nullable: true })
+  endDate!: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt!: Date | null;
